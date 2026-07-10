@@ -321,18 +321,17 @@ export interface StrategyTargets {
   listByPos: Record<string, BoardRow[]>;
 }
 
-export const INTEREST_OPTIONS = [
+// Single combined dropdown covering both draft/keeper ownership and scouting interest —
+// a player is either an ownership state (Mine/Keeper/My Keeper) or an interest rating
+// (Love/Like/Dislike), never both at once, so one value suffices.
+export const STATUS_OPTIONS = [
+  { value: "", label: "Open", color: "#3A3F4A", text: "#C9CCD2" },
   { value: "love", label: "Love", color: "#2E7D46", text: "#EDEEF0" },
   { value: "like", label: "Like", color: "#4C8F5B", text: "#EDEEF0" },
-  { value: "neutral", label: "Neutral", color: "#3A3F4A", text: "#C9CCD2" },
   { value: "dislike", label: "Dislike", color: "#A83A34", text: "#EDEEF0" },
-] as const;
-
-export const STATUS_OPTIONS = [
-  { value: "", label: "Open" },
-  { value: "mine", label: "Mine" },
-  { value: "keeper", label: "Keeper" },
-  { value: "keeper-mine", label: "My Keeper" },
+  { value: "mine", label: "Mine", color: "#3B6FA0", text: "#EDEEF0" },
+  { value: "keeper", label: "Keeper", color: "#8A5A2E", text: "#EDEEF0" },
+  { value: "keeper-mine", label: "My Keeper", color: "#5B3F8A", text: "#EDEEF0" },
 ] as const;
 
 export function computeStrategyTargets(board: Board, strategySlots: Record<Pos, number>): StrategyTargets {

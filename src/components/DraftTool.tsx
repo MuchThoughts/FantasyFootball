@@ -195,7 +195,13 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
     (row: BoardRowType, value: string) => {
       const wantsKeeper = value === "keeper" || value === "keeper-mine";
       const wantsMine = value === "mine" || value === "keeper-mine";
+      const interestValue: "love" | "like" | "dislike" | "neutral" =
+        value === "love" || value === "like" || value === "dislike" ? value : "neutral";
       update((prev) => {
+        const playerMeta = {
+          ...prev.playerMeta,
+          [row.id]: { ...prev.playerMeta[row.id], interest: interestValue },
+        };
         if (wantsKeeper) {
           const nextKeepers = {
             ...prev.keepers,
@@ -203,7 +209,7 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
           };
           const nextDrafted = { ...prev.drafted };
           delete nextDrafted[row.id];
-          return { ...prev, keepers: nextKeepers, drafted: nextDrafted };
+          return { ...prev, keepers: nextKeepers, drafted: nextDrafted, playerMeta };
         }
         const nextKeepers = { ...prev.keepers };
         delete nextKeepers[row.id];
@@ -211,17 +217,20 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
           ...prev.drafted,
           [row.id]: { price: prev.drafted[row.id] ? prev.drafted[row.id].price : "", mine: wantsMine },
         };
-        return { ...prev, keepers: nextKeepers, drafted: nextDrafted };
+        return { ...prev, keepers: nextKeepers, drafted: nextDrafted, playerMeta };
       });
     },
     [update]
   );
 
   const setMeta = useCallback(
-    (id: string, field: "max" | "interest", value: string) => {
+    (id: string, field: "max", value: string) => {
       update((prev) => ({
         ...prev,
-        playerMeta: { ...prev.playerMeta, [id]: { ...prev.playerMeta[id], [field]: value } },
+        playerMeta: {
+          ...prev.playerMeta,
+          [id]: { ...prev.playerMeta[id], [field]: value as unknown as number | "" },
+        },
       }));
     },
     [update]
@@ -564,7 +573,6 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
                   <th style={styles.th}>Max</th>
                   <th style={styles.th}>Paid</th>
                   <th style={styles.th}>Status</th>
-                  <th style={styles.th}>Interest</th>
                 </tr>
               </thead>
               <tbody>

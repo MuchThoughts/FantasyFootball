@@ -39,7 +39,7 @@ export function TierDivider({ pos, index, rank, lower, upper, breaks, color, onC
 
   return (
     <tr>
-      <td colSpan={10} style={{ padding: 0, border: "none", background: "transparent" }}>
+      <td colSpan={9} style={{ padding: 0, border: "none", background: "transparent" }}>
         <div
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}

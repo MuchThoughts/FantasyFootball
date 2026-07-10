@@ -1,6 +1,6 @@
 "use client";
 
-import { BoardRow as BoardRowType, INTEREST_OPTIONS, POS_COLOR, STATUS_OPTIONS, tierColor } from "@/lib/draftLogic";
+import { BoardRow as BoardRowType, POS_COLOR, STATUS_OPTIONS, tierColor } from "@/lib/draftLogic";
 import { styles } from "./styles";
 
 interface BoardRowProps {
@@ -8,14 +8,22 @@ interface BoardRowProps {
   tierBreak: boolean;
   isTarget: boolean;
   onPaid: (row: BoardRowType, value: string) => void;
-  onMeta: (id: string, field: "max" | "interest", value: string) => void;
+  onMeta: (id: string, field: "max", value: string) => void;
   onStatus: (row: BoardRowType, value: string) => void;
   onKeeperCost: (row: BoardRowType, value: string) => void;
 }
 
 export function BoardRow({ row, tierBreak, isTarget, onPaid, onMeta, onStatus, onKeeperCost }: BoardRowProps) {
-  const interestOpt = INTEREST_OPTIONS.find((o) => o.value === row.interest) || INTEREST_OPTIONS[2];
-  const statusValue = row.isKeeper ? (row.mine ? "keeper-mine" : "keeper") : row.mine ? "mine" : "";
+  const statusValue = row.isKeeper
+    ? row.mine
+      ? "keeper-mine"
+      : "keeper"
+    : row.mine
+    ? "mine"
+    : row.interest === "love" || row.interest === "like" || row.interest === "dislike"
+    ? row.interest
+    : "";
+  const statusOpt = STATUS_OPTIONS.find((o) => o.value === statusValue) || STATUS_OPTIONS[0];
   const dimmed = row.isDrafted || row.isKeeper || row.interest === "dislike";
   const tBreakStyle = tierBreak ? { borderTop: `2px solid ${tierColor(row.tier)}` } : {};
   const targetGlow = isTarget && !dimmed ? { boxShadow: "inset 3px 0 0 #4CAF6B" } : {};
@@ -101,7 +109,12 @@ export function BoardRow({ row, tierBreak, isTarget, onPaid, onMeta, onStatus, o
       </td>
       <td style={{ ...styles.td, ...tBreakStyle, ...bgStyle }}>
         <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-          <select style={styles.statusSelect} value={statusValue} onChange={(e) => onStatus(row, e.target.value)}>
+          <select
+            style={{ ...styles.cellSelect, width: 78, background: statusOpt.color, color: statusOpt.text }}
+            value={statusValue}
+            onChange={(e) => onStatus(row, e.target.value)}
+            title={statusOpt.label}
+          >
             {STATUS_OPTIONS.map((o) => (
               <option key={o.value} value={o.value} style={{ background: "#1C2128", color: "#EDEEF0" }}>
                 {o.label}
@@ -118,20 +131,6 @@ export function BoardRow({ row, tierBreak, isTarget, onPaid, onMeta, onStatus, o
             />
           )}
         </div>
-      </td>
-      <td style={{ ...styles.td, ...tBreakStyle, ...bgStyle }}>
-        <select
-          style={{ ...styles.cellSelect, background: interestOpt.color, color: interestOpt.text }}
-          value={row.interest}
-          onChange={(e) => onMeta(row.id, "interest", e.target.value)}
-          title={interestOpt.label}
-        >
-          {INTEREST_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value} style={{ background: "#1C2128", color: "#EDEEF0" }}>
-              {o.label}
-            </option>
-          ))}
-        </select>
       </td>
     </tr>
   );
