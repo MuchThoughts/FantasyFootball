@@ -162,7 +162,8 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
         (x) => !x.isDrafted && !x.isKeeper && (x.interest === "love" || x.interest === "like") && (x.live ?? Infinity) <= endgameMaxBid
       );
     }
-    if (posFilter !== "ALL") r = r.filter((x) => x.pos === posFilter);
+    if (posFilter === "LIKED") r = r.filter((x) => x.interest === "love" || x.interest === "like");
+    else if (posFilter !== "ALL") r = r.filter((x) => x.pos === posFilter);
     if (search.trim()) {
       const s = search.trim().toLowerCase();
       r = r.filter((x) => x.name.toLowerCase().includes(s));
@@ -182,6 +183,10 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
       return a.adp - b.adp;
     });
   }, [board.rows, posFilter, search, sortKey, endgameMode, endgameMaxBid]);
+
+  // true only when a single real position is selected (not ALL or the Liked filter) —
+  // tier bars are per-position, so their controls only apply in that case.
+  const isPosFilter = (POSITIONS as string[]).includes(posFilter);
 
   const setPaid = useCallback(
     (row: BoardRowType, value: string) => {
@@ -593,28 +598,28 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
           )}
 
           <div style={styles.chipRow}>
-            {["ALL", ...POSITIONS].map((p) => (
+            {["ALL", ...POSITIONS, "LIKED"].map((p) => (
               <button
                 key={p}
                 style={posFilter === p ? { ...styles.chip, ...chipActive(p) } : styles.chip}
                 onClick={() => setPosFilter(p)}
               >
-                {p}
+                {p === "LIKED" ? "♥ Liked" : p}
               </button>
             ))}
-            {posFilter !== "ALL" && (
+            {isPosFilter && (
               <button style={styles.smallBtn} onClick={() => addTierBar(posFilter)}>
                 + Add tier
               </button>
             )}
-            {posFilter !== "ALL" && Object.prototype.hasOwnProperty.call(d.tierOverrides, posFilter) && (
+            {isPosFilter && Object.prototype.hasOwnProperty.call(d.tierOverrides, posFilter) && (
               <button style={styles.smallBtn} onClick={() => resetTiers(posFilter)}>
                 Reset {posFilter} tiers
               </button>
             )}
           </div>
 
-          {posFilter !== "ALL" && (
+          {isPosFilter && (
             <div style={{ fontSize: 11, color: "#8B92A0", marginBottom: 10 }}>
               Drag a tier bar to move players between tiers, or use the ✕ on a bar to remove it.
             </div>
@@ -662,12 +667,12 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
               </thead>
               <tbody>
                 {(() => {
-                  const breaks = posFilter !== "ALL" ? board.tierBreaks[posFilter] || [] : [];
-                  const posCount = posFilter !== "ALL" ? board.positionCounts[posFilter] || 0 : 0;
+                  const breaks = isPosFilter ? board.tierBreaks[posFilter] || [] : [];
+                  const posCount = isPosFilter ? board.positionCounts[posFilter] || 0 : 0;
                   return filteredRows.map((row, idx) => {
                     const prevRow = filteredRows[idx - 1];
                     const tierBreak = !!prevRow && prevRow.pos === row.pos && prevRow.tier !== row.tier && row.tier != null;
-                    const breakIndex = posFilter !== "ALL" && !row.isKeeper ? breaks.indexOf(row.effRank as number) : -1;
+                    const breakIndex = isPosFilter && !row.isKeeper ? breaks.indexOf(row.effRank as number) : -1;
                     return (
                       <Fragment key={row.id}>
                         <BoardRow

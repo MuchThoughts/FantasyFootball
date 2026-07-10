@@ -6,9 +6,10 @@ export const fontImport = `
 `;
 
 export function chipActive(pos: string): CSSProperties {
+  const bg = pos === "ALL" ? "#EDEEF0" : pos === "LIKED" ? "#4CAF6B" : POS_COLOR[pos as Pos];
   return {
-    background: pos === "ALL" ? "#EDEEF0" : POS_COLOR[pos as Pos],
-    borderColor: pos === "ALL" ? "#EDEEF0" : POS_COLOR[pos as Pos],
+    background: bg,
+    borderColor: bg,
     color: "#14171C",
     fontWeight: 600,
   };
