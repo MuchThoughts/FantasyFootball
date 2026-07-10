@@ -1,0 +1,138 @@
+"use client";
+
+import { BoardRow as BoardRowType, INTEREST_OPTIONS, POS_COLOR, STATUS_OPTIONS, tierColor } from "@/lib/draftLogic";
+import { styles } from "./styles";
+
+interface BoardRowProps {
+  row: BoardRowType;
+  tierBreak: boolean;
+  isTarget: boolean;
+  onPaid: (row: BoardRowType, value: string) => void;
+  onMeta: (id: string, field: "max" | "interest", value: string) => void;
+  onStatus: (row: BoardRowType, value: string) => void;
+  onKeeperCost: (row: BoardRowType, value: string) => void;
+}
+
+export function BoardRow({ row, tierBreak, isTarget, onPaid, onMeta, onStatus, onKeeperCost }: BoardRowProps) {
+  const interestOpt = INTEREST_OPTIONS.find((o) => o.value === row.interest) || INTEREST_OPTIONS[2];
+  const statusValue = row.isKeeper ? (row.mine ? "keeper-mine" : "keeper") : row.mine ? "mine" : "";
+  const dimmed = row.isDrafted || row.isKeeper || row.interest === "dislike";
+  const tBreakStyle = tierBreak ? { borderTop: `2px solid ${tierColor(row.tier)}` } : {};
+  const targetGlow = isTarget && !dimmed ? { boxShadow: "inset 3px 0 0 #4CAF6B" } : {};
+  const rowTint =
+    row.interest === "love" ? "rgba(76, 175, 107, 0.38)" : row.interest === "like" ? "rgba(76, 175, 107, 0.14)" : null;
+  const bgStyle = rowTint ? { background: rowTint } : {};
+
+  let liveAlertColor: string | null = null;
+  let liveAlertLabel = "";
+  if (!row.isKeeper && !row.isDrafted && row.live != null) {
+    const hasMax = row.max !== "" && row.max != null;
+    if (hasMax && row.live > Number(row.max)) {
+      liveAlertColor = "#E1524B";
+      liveAlertLabel = `Live $${row.live} is above your max $${row.max}`;
+    } else if (hasMax) {
+      liveAlertColor = "#4CAF6B";
+      liveAlertLabel = "Live price is within your max";
+    }
+  }
+
+  return (
+    <tr style={{ opacity: dimmed ? 0.4 : 1 }}>
+      <td style={{ ...styles.td, ...styles.tdSticky, ...tBreakStyle, ...bgStyle, ...targetGlow }}>
+        <span style={{ ...styles.tdMono, fontSize: 11 }}>
+          {row.pos}
+          {row.effRank ?? "–"}
+        </span>
+      </td>
+      <td style={{ ...styles.td, ...styles.tdSticky2, ...tBreakStyle, ...bgStyle }}>
+        <div style={styles.tdPlayerName}>
+          {row.name} {isTarget && !dimmed && <span style={styles.targetStar}>★</span>}
+        </div>
+        <div style={styles.tdPlayerMeta}>
+          {row.team ? row.team + " · " : ""}ADP {row.adp}
+        </div>
+      </td>
+      <td style={{ ...styles.td, ...tBreakStyle, ...bgStyle }}>
+        <span style={{ ...styles.posTagSm, background: POS_COLOR[row.pos] }}>{row.pos}</span>
+      </td>
+      <td style={{ ...styles.td, ...styles.tdMono, ...tBreakStyle, ...bgStyle }}>
+        {row.tier ? (
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+            <span style={{ ...styles.tierDot, background: tierColor(row.tier) }} />T{row.tier}
+          </span>
+        ) : (
+          "—"
+        )}
+      </td>
+      <td style={{ ...styles.td, ...styles.tdMono, ...tBreakStyle, ...bgStyle }}>{row.isKeeper ? "—" : row.target}</td>
+      <td
+        style={{
+          ...styles.td,
+          ...styles.tdMono,
+          ...tBreakStyle,
+          ...bgStyle,
+          fontWeight: liveAlertColor ? 700 : 400,
+          color: dimmed ? "#4A5160" : liveAlertColor || "#8B92A0",
+        }}
+        title={liveAlertLabel}
+      >
+        {row.isKeeper || row.isDrafted ? "—" : row.live}
+      </td>
+      <td style={{ ...styles.td, ...tBreakStyle, ...bgStyle }}>
+        <input
+          style={styles.cellInput}
+          type="number"
+          value={row.max}
+          onChange={(e) => onMeta(row.id, "max", e.target.value)}
+        />
+      </td>
+      <td style={{ ...styles.td, ...tBreakStyle, ...bgStyle }}>
+        {row.isKeeper ? (
+          <span style={{ fontSize: 10, color: "#8B92A0" }}>—</span>
+        ) : (
+          <input
+            style={{ ...styles.cellInput, fontWeight: 700, color: row.isDrafted ? "#EDEEF0" : "#8B92A0" }}
+            type="number"
+            value={row.paid}
+            placeholder="—"
+            onChange={(e) => onPaid(row, e.target.value)}
+          />
+        )}
+      </td>
+      <td style={{ ...styles.td, ...tBreakStyle, ...bgStyle }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+          <select style={styles.statusSelect} value={statusValue} onChange={(e) => onStatus(row, e.target.value)}>
+            {STATUS_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value} style={{ background: "#1C2128", color: "#EDEEF0" }}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+          {row.isKeeper && (
+            <input
+              style={{ ...styles.cellInput, width: 32 }}
+              type="number"
+              placeholder="$"
+              value={row.keeperCost}
+              onChange={(e) => onKeeperCost(row, e.target.value)}
+            />
+          )}
+        </div>
+      </td>
+      <td style={{ ...styles.td, ...tBreakStyle, ...bgStyle }}>
+        <select
+          style={{ ...styles.cellSelect, background: interestOpt.color, color: interestOpt.text }}
+          value={row.interest}
+          onChange={(e) => onMeta(row.id, "interest", e.target.value)}
+          title={interestOpt.label}
+        >
+          {INTEREST_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value} style={{ background: "#1C2128", color: "#EDEEF0" }}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      </td>
+    </tr>
+  );
+}
