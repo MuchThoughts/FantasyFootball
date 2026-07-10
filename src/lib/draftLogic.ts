@@ -153,7 +153,36 @@ export interface Board {
   positionCounts: Record<string, number>;
 }
 
-const NUM_TIER_BARS = 6; // always 6 draggable bars = 7 tiers per position
+// Find the rank (1-indexed, clamped to an interior boundary) whose market price is
+// closest to a given dollar amount — used to place a tier bar at "roughly what this
+// strategy slot would pay," so tiers read as "the players you can get for each slot."
+function nearestRankForAmount(pos: string, amount: number, n: number): number | null {
+  if (n < 2 || amount <= 0) return null;
+  let bestRank = 1;
+  let bestDiff = Infinity;
+  for (let r = 1; r <= n; r++) {
+    const diff = Math.abs(curveDollars(pos, r) - amount);
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      bestRank = r;
+    }
+  }
+  return Math.max(1, Math.min(n - 1, bestRank));
+}
+
+// Default tier breaks for a position, derived from the active strategy's slot $
+// amounts at that position — one candidate boundary per distinct slot amount.
+function strategyDerivedBreaks(pos: string, n: number, activeStrategy: Strategy | undefined): number[] {
+  if (!activeStrategy) return [];
+  const ranks = new Set<number>();
+  activeStrategy.slots
+    .filter((sl) => sl.pos === pos)
+    .forEach((sl) => {
+      const rank = nearestRankForAmount(pos, Number(sl.amount) || 0, n);
+      if (rank != null) ranks.add(rank);
+    });
+  return Array.from(ranks).sort((a, b) => a - b);
+}
 
 export function computeBoard(
   settings: Settings,
@@ -161,7 +190,8 @@ export function computeBoard(
   drafted: Record<string, DraftedEntry>,
   allPlayers: Player[],
   playerMeta: Record<string, PlayerMetaEntry>,
-  tierOverrides: Record<string, number[]>
+  tierOverrides: Record<string, number[]>,
+  activeStrategy: Strategy | undefined
 ): Board {
   const totalBudget = settings.teams * settings.budget;
   const keeperList = Object.entries(keepers).map(([id, k]) => ({ id, ...k }));
@@ -215,17 +245,11 @@ export function computeBoard(
     const n = posRows.length;
     positionCounts[pos] = n;
 
-    const autoBreaks: number[] = [];
-    let prev = 0;
-    for (let i = 1; i <= NUM_TIER_BARS; i++) {
-      let b = Math.round((i * n) / (NUM_TIER_BARS + 1));
-      b = Math.max(prev + 1, Math.min(n - 1, b));
-      autoBreaks.push(b);
-      prev = b;
-    }
-
-    const breaks =
-      tierOverrides[pos] && tierOverrides[pos].length === NUM_TIER_BARS ? tierOverrides[pos] : autoBreaks;
+    // Presence of the key (even an empty array, meaning "all bars manually removed")
+    // means the user has taken manual control of this position's tiers; absence means
+    // "use whatever the active strategy implies."
+    const hasOverride = Object.prototype.hasOwnProperty.call(tierOverrides, pos);
+    const breaks = hasOverride ? tierOverrides[pos] : strategyDerivedBreaks(pos, n, activeStrategy);
     tierBreaksUsed[pos] = breaks;
 
     posRows.forEach((r) => {

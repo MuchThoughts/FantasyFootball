@@ -114,14 +114,14 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
 
   const allPlayers = useMemo(() => [...PLAYERS_DATA, ...d.customPlayers], [d.customPlayers]);
 
-  const board = useMemo(
-    () => computeBoard(d.settings, d.keepers, d.drafted, allPlayers, d.playerMeta, d.tierOverrides),
-    [d.settings, d.keepers, d.drafted, allPlayers, d.playerMeta, d.tierOverrides]
-  );
-
   const activeStrategy = useMemo(
     () => d.strategies.find((s) => s.id === d.activeStrategyId) || d.strategies[0],
     [d.strategies, d.activeStrategyId]
+  );
+
+  const board = useMemo(
+    () => computeBoard(d.settings, d.keepers, d.drafted, allPlayers, d.playerMeta, d.tierOverrides, activeStrategy),
+    [d.settings, d.keepers, d.drafted, allPlayers, d.playerMeta, d.tierOverrides, activeStrategy]
   );
 
   const strategySlots = useMemo(() => computeStrategySlots(activeStrategy), [activeStrategy]);
@@ -252,7 +252,8 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
   const setTierBoundary = useCallback(
     (pos: string, index: number, currentBreaks: number[], newRank: number) => {
       update((prev) => {
-        const base = prev.tierOverrides[pos] && prev.tierOverrides[pos].length ? prev.tierOverrides[pos] : currentBreaks;
+        const hasOverride = Object.prototype.hasOwnProperty.call(prev.tierOverrides, pos);
+        const base = hasOverride ? prev.tierOverrides[pos] : currentBreaks;
         const next = [...base];
         next[index] = newRank;
         next.sort((a, b) => a - b);
@@ -269,6 +270,56 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
         delete next[pos];
         return { ...prev, tierOverrides: next };
       });
+    },
+    [update]
+  );
+
+  // Splits whichever gap between existing bars (or the position's ends) is currently
+  // largest, so "add a bar" always lands somewhere useful without the user picking a rank.
+  const addTierBar = useCallback(
+    (pos: string) => {
+      update((prev) => {
+        const n = board.positionCounts[pos] || 0;
+        if (n < 2) return prev;
+        const hasOverride = Object.prototype.hasOwnProperty.call(prev.tierOverrides, pos);
+        const current = hasOverride ? prev.tierOverrides[pos] : board.tierBreaks[pos] || [];
+        const bounds = [0, ...current, n];
+        let bestGapIdx = 0;
+        let bestGapSize = -1;
+        for (let i = 0; i < bounds.length - 1; i++) {
+          const size = bounds[i + 1] - bounds[i];
+          if (size > bestGapSize) {
+            bestGapSize = size;
+            bestGapIdx = i;
+          }
+        }
+        if (bestGapSize < 2) return prev; // no room left to split further
+        const newRank = Math.floor((bounds[bestGapIdx] + bounds[bestGapIdx + 1]) / 2);
+        const next = Array.from(new Set([...current, newRank])).sort((a, b) => a - b);
+        return { ...prev, tierOverrides: { ...prev.tierOverrides, [pos]: next } };
+      });
+    },
+    [update, board.positionCounts, board.tierBreaks]
+  );
+
+  const removeTierBar = useCallback(
+    (pos: string, rank: number) => {
+      update((prev) => {
+        const hasOverride = Object.prototype.hasOwnProperty.call(prev.tierOverrides, pos);
+        const current = hasOverride ? prev.tierOverrides[pos] : board.tierBreaks[pos] || [];
+        const next = current.filter((r) => r !== rank);
+        return { ...prev, tierOverrides: { ...prev.tierOverrides, [pos]: next } };
+      });
+    },
+    [update, board.tierBreaks]
+  );
+
+  // Switching strategy resets manually-dragged/added/removed tier bars back to
+  // whatever the new strategy implies — tiers "follow" the active strategy. Re-selecting
+  // the already-active strategy is a no-op so it doesn't wipe manual edits pointlessly.
+  const selectStrategy = useCallback(
+    (id: string) => {
+      update((prev) => (prev.activeStrategyId === id ? prev : { ...prev, activeStrategyId: id, tierOverrides: {} }));
     },
     [update]
   );
@@ -426,6 +477,19 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
 
       {tab === "board" && (
         <>
+          <div style={styles.chipRow}>
+            <span style={{ fontSize: 11, color: "#8B92A0", alignSelf: "center", marginRight: 2 }}>Strategy:</span>
+            {d.strategies.map((s) => (
+              <button
+                key={s.id}
+                style={s.id === d.activeStrategyId ? { ...styles.chip, ...chipActive("ALL") } : styles.chip}
+                onClick={() => selectStrategy(s.id)}
+              >
+                {s.name}
+              </button>
+            ))}
+          </div>
+
           {endgameSuggested && (
             <div style={styles.endgameBanner}>
               <span>
@@ -497,7 +561,12 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
                 {p}
               </button>
             ))}
-            {posFilter !== "ALL" && d.tierOverrides[posFilter] && d.tierOverrides[posFilter].length > 0 && (
+            {posFilter !== "ALL" && (
+              <button style={styles.smallBtn} onClick={() => addTierBar(posFilter)}>
+                + Add tier
+              </button>
+            )}
+            {posFilter !== "ALL" && Object.prototype.hasOwnProperty.call(d.tierOverrides, posFilter) && (
               <button style={styles.smallBtn} onClick={() => resetTiers(posFilter)}>
                 Reset {posFilter} tiers
               </button>
@@ -506,7 +575,7 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
 
           {posFilter !== "ALL" && (
             <div style={{ fontSize: 11, color: "#8B92A0", marginBottom: 10 }}>
-              Drag a tier bar up or down to move players between tiers.
+              Drag a tier bar to move players between tiers, or use the ✕ on a bar to remove it.
             </div>
           )}
 
@@ -579,6 +648,7 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
                             breaks={breaks}
                             color={tierColor(row.tier)}
                             onChange={setTierBoundary}
+                            onRemove={removeTierBar}
                           />
                         )}
                       </Fragment>
@@ -596,7 +666,7 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
         <StrategyTab
           strategies={d.strategies}
           activeStrategyId={d.activeStrategyId}
-          setActiveStrategyId={(id) => update((prev) => ({ ...prev, activeStrategyId: id }))}
+          setActiveStrategyId={selectStrategy}
           budget={d.settings.budget}
           boardRows={board.rows}
           onSlotPos={setSlotPos}
@@ -604,6 +674,7 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
           onName={setStrategyName}
           onAdd={addStrategy}
           onDelete={deleteStrategy}
+          onStatus={setStatus}
         />
       )}
 

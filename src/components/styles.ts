@@ -496,18 +496,6 @@ export const styles: Record<string, CSSProperties> = {
     color: "#EDEEF0",
     marginBottom: 12,
   },
-  compRow: {
-    padding: "4px 8px 10px",
-    fontSize: 11,
-    color: "#C9CCD2",
-    background: "#14171C",
-    whiteSpace: "normal",
-    lineHeight: 1.5,
-  },
-  compLabel: {
-    color: "#8B92A0",
-    fontWeight: 600,
-  },
   compPrice: {
     color: "#8B92A0",
     fontFamily: "'IBM Plex Mono', monospace",

@@ -14,13 +14,14 @@ interface TierDividerProps {
   breaks: number[];
   color: string;
   onChange: (pos: string, index: number, breaks: number[], newRank: number) => void;
+  onRemove: (pos: string, rank: number) => void;
 }
 
 // The divider is rendered under whichever row currently sits at the boundary rank,
 // so moving the boundary remounts this component under a different row mid-drag.
 // The drag must therefore live on window listeners captured in the pointerdown
 // closure — component-local pointermove handlers would die after the first step.
-export function TierDivider({ pos, index, rank, lower, upper, breaks, color, onChange }: TierDividerProps) {
+export function TierDivider({ pos, index, rank, lower, upper, breaks, color, onChange, onRemove }: TierDividerProps) {
   const [dragging, setDragging] = useState(false);
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -56,6 +57,7 @@ export function TierDivider({ pos, index, rank, lower, upper, breaks, color, onC
           onPointerDown={onPointerDown}
           style={{
             ...styles.tierDivider,
+            position: "relative",
             background: dragging ? color : `${color}55`,
             cursor: "ns-resize",
           }}
@@ -63,6 +65,30 @@ export function TierDivider({ pos, index, rank, lower, upper, breaks, color, onC
           <span style={styles.tierDividerHandle}>
             ⋮⋮⋮ tier {index + 1} / {index + 2} boundary — drag ⋮⋮⋮
           </span>
+          <button
+            title="Remove this tier bar"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove(pos, rank);
+            }}
+            style={{
+              position: "absolute",
+              right: 4,
+              top: "50%",
+              transform: "translateY(-50%)",
+              background: "transparent",
+              border: "none",
+              color: "#171A20",
+              fontWeight: 700,
+              fontSize: 11,
+              cursor: "pointer",
+              padding: "0 4px",
+              lineHeight: 1,
+            }}
+          >
+            ✕
+          </button>
         </div>
       </td>
     </tr>
