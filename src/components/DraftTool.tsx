@@ -224,11 +224,12 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
 
   const setMeta = useCallback(
     (id: string, field: "max", value: string) => {
+      const parsed: number | "" = value === "" ? "" : Number(value);
       update((prev) => ({
         ...prev,
         playerMeta: {
           ...prev.playerMeta,
-          [id]: { ...prev.playerMeta[id], [field]: value as unknown as number | "" },
+          [id]: { ...prev.playerMeta[id], [field]: parsed },
         },
       }));
     },
@@ -335,6 +336,7 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
 
   const deleteStrategy = useCallback(
     (id: string) => {
+      if (!window.confirm("Delete this strategy? This can't be undone.")) return;
       update((prev) => {
         const next = prev.strategies.filter((s) => s.id !== id);
         const strategies = next.length ? next : DEFAULT_STRATEGIES;

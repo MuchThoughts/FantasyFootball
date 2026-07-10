@@ -20,6 +20,26 @@ export function defaultDraftData(): DraftData {
 
 export type SaveState = "idle" | "saving" | "saved" | "error";
 
+// JSON.stringify with recursively sorted object keys. Postgres jsonb does not
+// preserve key order, so realtime echoes of our own writes come back with keys
+// re-sorted — naive stringify comparison would treat every echo as a foreign
+// update and re-save, looping forever.
+function canonicalJson(value: unknown): string {
+  return JSON.stringify(sortKeys(value));
+}
+
+function sortKeys(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortKeys);
+  if (value && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const key of Object.keys(value as Record<string, unknown>).sort()) {
+      out[key] = sortKeys((value as Record<string, unknown>)[key]);
+    }
+    return out;
+  }
+  return value;
+}
+
 // Persists DraftData for a given profile to Supabase, debounces writes, and
 // subscribes to postgres_changes so other devices on the same profile see
 // live updates during a draft.
@@ -51,11 +71,11 @@ export function useDraftState(profileId: string | null) {
 
       if (row && row.state && Object.keys(row.state as object).length > 0) {
         const merged = { ...defaultDraftData(), ...(row.state as Partial<DraftData>) };
-        lastSyncedJson.current = JSON.stringify(merged);
+        lastSyncedJson.current = canonicalJson(merged);
         setData(merged);
       } else {
         const fresh = defaultDraftData();
-        lastSyncedJson.current = JSON.stringify(fresh);
+        lastSyncedJson.current = canonicalJson(fresh);
         await supabase.from("draft_states").upsert({ profile_id: profileId, state: fresh });
         if (!cancelled) setData(fresh);
       }
@@ -75,10 +95,11 @@ export function useDraftState(profileId: string | null) {
         (payload) => {
           const newState = (payload.new as { state?: Partial<DraftData> } | null)?.state;
           if (!newState) return;
-          const json = JSON.stringify(newState);
+          const merged = { ...defaultDraftData(), ...newState };
+          const json = canonicalJson(merged);
           if (json === lastSyncedJson.current) return; // echo of our own write
           lastSyncedJson.current = json;
-          setData({ ...defaultDraftData(), ...newState });
+          setData(merged);
         }
       )
       .subscribe();
@@ -92,17 +113,22 @@ export function useDraftState(profileId: string | null) {
   // debounced persist on local edits
   useEffect(() => {
     if (!loaded || !data || !profileId) return;
-    const json = JSON.stringify(data);
+    const json = canonicalJson(data);
     if (json === lastSyncedJson.current) return;
 
     setSaveState("saving");
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
+      // set before awaiting so the realtime echo of this write is suppressed
       lastSyncedJson.current = json;
       const { error } = await supabase
         .from("draft_states")
         .update({ state: data, updated_at: new Date().toISOString() })
         .eq("profile_id", profileId);
+      if (error) {
+        // un-mark as synced so the next edit (or remount) retries this state
+        lastSyncedJson.current = "";
+      }
       setSaveState(error ? "error" : "saved");
     }, 400);
 

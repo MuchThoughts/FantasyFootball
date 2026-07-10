@@ -597,6 +597,7 @@ export const styles: Record<string, CSSProperties> = {
   },
   slotRow: {
     display: "flex",
+    flexWrap: "wrap",
     alignItems: "center",
     gap: 10,
     padding: "9px 2px",
