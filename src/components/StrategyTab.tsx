@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useMemo } from "react";
 import { Strategy } from "@/lib/data/strategies";
-import { BoardRow, FIXED_SLOT_POS, fmtMoney, POS_COLOR, POSITIONS, Pos, slotLabel } from "@/lib/draftLogic";
+import { BoardRow, FIXED_SLOT_POS, fmtMoney, Interest, POS_COLOR, POSITIONS, Pos, slotLabel } from "@/lib/draftLogic";
+import { usePlayerRating } from "@/hooks/usePlayerRating";
 import { styles, chipActive } from "./styles";
 
 interface StrategyTabProps {
@@ -16,70 +17,20 @@ interface StrategyTabProps {
   onName: (strategyId: string, name: string) => void;
   onAdd: () => void;
   onDelete: (id: string) => void;
-  onStatus: (row: BoardRow, value: string) => void;
+  onRate: (row: BoardRow, value: Interest) => void;
 }
 
-const LONG_PRESS_MS = 550;
-const CLICK_DELAY_MS = 280;
-
 // A single clickable player name: click = Like, double-click = Love, press-and-hold =
-// Dislike. Disliking also drops the player out of the candidate pool the parent draws
-// from, so the next-closest player backfills automatically on the next render.
-function CompPlayerItem({ row, onStatus }: { row: BoardRow; onStatus: (row: BoardRow, value: string) => void }) {
-  const [pressing, setPressing] = useState(false);
-  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const longPressFired = useRef(false);
-
-  const clearPressTimer = () => {
-    if (pressTimer.current) {
-      clearTimeout(pressTimer.current);
-      pressTimer.current = null;
-    }
-  };
-
-  const onPointerDown = () => {
-    longPressFired.current = false;
-    setPressing(true);
-    pressTimer.current = setTimeout(() => {
-      longPressFired.current = true;
-      setPressing(false);
-      onStatus(row, "dislike");
-    }, LONG_PRESS_MS);
-  };
-  const onPointerUp = () => {
-    setPressing(false);
-    clearPressTimer();
-  };
-
-  const onClick = () => {
-    if (longPressFired.current) {
-      longPressFired.current = false;
-      return;
-    }
-    if (clickTimer.current) {
-      clearTimeout(clickTimer.current);
-      clickTimer.current = null;
-      onStatus(row, "love");
-    } else {
-      clickTimer.current = setTimeout(() => {
-        clickTimer.current = null;
-        onStatus(row, "like");
-      }, CLICK_DELAY_MS);
-    }
-  };
-
+// Dislike (each toggles). Disliking drops the player out of the candidate pool the
+// parent draws from, so the next-closest player backfills automatically.
+function CompPlayerItem({ row, onRate }: { row: BoardRow; onRate: (row: BoardRow, value: Interest) => void }) {
+  const { pressing, handlers } = usePlayerRating(row.interest, (v) => onRate(row, v));
   const textColor = row.interest === "love" ? "#4CAF6B" : row.interest === "like" ? "#8FCB9E" : "#C9CCD2";
 
   return (
     <button
-      onPointerDown={onPointerDown}
-      onPointerUp={onPointerUp}
-      onPointerLeave={onPointerUp}
-      onPointerCancel={onPointerUp}
-      onClick={onClick}
-      onContextMenu={(e) => e.preventDefault()}
-      title="Click = Like, double-click = Love, press and hold = Dislike"
+      {...handlers}
+      title="Click = Like, double-click = Love, press and hold = Dislike (click again to undo)"
       style={{
         display: "block",
         width: "100%",
@@ -93,6 +44,9 @@ function CompPlayerItem({ row, onStatus }: { row: BoardRow; onStatus: (row: Boar
         lineHeight: 1.6,
         color: textColor,
         transition: "background 0.1s ease",
+        userSelect: "none",
+        WebkitUserSelect: "none",
+        touchAction: "manipulation",
       }}
     >
       {row.name} <span style={styles.compPrice}>(${row.target})</span>
@@ -111,7 +65,7 @@ export function StrategyTab({
   onName,
   onAdd,
   onDelete,
-  onStatus,
+  onRate,
 }: StrategyTabProps) {
   const active = strategies.find((s) => s.id === activeStrategyId) || strategies[0];
 
@@ -223,7 +177,7 @@ export function StrategyTab({
                     <td style={{ ...styles.td, textAlign: "left", verticalAlign: "top" }}>
                       <div style={{ display: "flex", flexDirection: "column" }}>
                         {comps.map((c) => (
-                          <CompPlayerItem key={c.id} row={c} onStatus={onStatus} />
+                          <CompPlayerItem key={c.id} row={c} onRate={onRate} />
                         ))}
                         {comps.length === 0 && <span style={{ fontSize: 11, color: "#4A5160" }}>—</span>}
                       </div>

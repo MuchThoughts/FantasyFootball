@@ -8,6 +8,7 @@ import { OFFENSE_DATA } from "@/lib/data/offense";
 import { DEFAULT_STRATEGIES } from "@/lib/data/strategies";
 import {
   BoardRow as BoardRowType,
+  Interest,
   computeBoard,
   computeStrategySlots,
   computeStrategyTargets,
@@ -119,9 +120,14 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
     [d.strategies, d.activeStrategyId]
   );
 
+  const activeInterest = useMemo(
+    () => d.interestByStrategy[d.activeStrategyId] ?? {},
+    [d.interestByStrategy, d.activeStrategyId]
+  );
+
   const board = useMemo(
-    () => computeBoard(d.settings, d.keepers, d.drafted, allPlayers, d.playerMeta, d.tierOverrides, activeStrategy),
-    [d.settings, d.keepers, d.drafted, allPlayers, d.playerMeta, d.tierOverrides, activeStrategy]
+    () => computeBoard(d.settings, d.keepers, d.drafted, allPlayers, d.playerMeta, d.tierOverrides, activeStrategy, activeInterest),
+    [d.settings, d.keepers, d.drafted, allPlayers, d.playerMeta, d.tierOverrides, activeStrategy, activeInterest]
   );
 
   const strategySlots = useMemo(() => computeStrategySlots(activeStrategy), [activeStrategy]);
@@ -190,17 +196,47 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
     [update]
   );
 
+  // Writes the active strategy's interest rating for one player. "neutral" clears it.
+  // Ownership (keeper/drafted) is left untouched — it's global, not per-strategy.
+  const setInterest = useCallback(
+    (row: BoardRowType, value: Interest) => {
+      update((prev) => {
+        const map = { ...(prev.interestByStrategy[prev.activeStrategyId] ?? {}) };
+        if (value === "neutral") delete map[row.id];
+        else map[row.id] = value;
+        return { ...prev, interestByStrategy: { ...prev.interestByStrategy, [prev.activeStrategyId]: map } };
+      });
+    },
+    [update]
+  );
+
+  // The combined Status dropdown on the board: ownership and interest are mutually
+  // exclusive here, so setting one clears the other. Interest is per active strategy;
+  // ownership is global.
   const setStatus = useCallback(
     (row: BoardRowType, value: string) => {
-      const wantsKeeper = value === "keeper" || value === "keeper-mine";
-      const wantsMine = value === "mine" || value === "keeper-mine";
-      const interestValue: "love" | "like" | "dislike" | "neutral" =
-        value === "love" || value === "like" || value === "dislike" ? value : "neutral";
+      const isInterest = value === "" || value === "love" || value === "like" || value === "dislike";
       update((prev) => {
-        const playerMeta = {
-          ...prev.playerMeta,
-          [row.id]: { ...prev.playerMeta[row.id], interest: interestValue },
-        };
+        const map = { ...(prev.interestByStrategy[prev.activeStrategyId] ?? {}) };
+        if (isInterest) {
+          if (value === "" ) delete map[row.id];
+          else map[row.id] = value as Interest;
+          const nextKeepers = { ...prev.keepers };
+          delete nextKeepers[row.id];
+          const nextDrafted = { ...prev.drafted };
+          delete nextDrafted[row.id];
+          return {
+            ...prev,
+            keepers: nextKeepers,
+            drafted: nextDrafted,
+            interestByStrategy: { ...prev.interestByStrategy, [prev.activeStrategyId]: map },
+          };
+        }
+        // ownership: mine / keeper / keeper-mine — clear any interest for this strategy
+        delete map[row.id];
+        const wantsKeeper = value === "keeper" || value === "keeper-mine";
+        const wantsMine = value === "mine" || value === "keeper-mine";
+        const interestByStrategy = { ...prev.interestByStrategy, [prev.activeStrategyId]: map };
         if (wantsKeeper) {
           const nextKeepers = {
             ...prev.keepers,
@@ -208,7 +244,7 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
           };
           const nextDrafted = { ...prev.drafted };
           delete nextDrafted[row.id];
-          return { ...prev, keepers: nextKeepers, drafted: nextDrafted, playerMeta };
+          return { ...prev, keepers: nextKeepers, drafted: nextDrafted, interestByStrategy };
         }
         const nextKeepers = { ...prev.keepers };
         delete nextKeepers[row.id];
@@ -216,7 +252,7 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
           ...prev.drafted,
           [row.id]: { price: prev.drafted[row.id] ? prev.drafted[row.id].price : "", mine: wantsMine },
         };
-        return { ...prev, keepers: nextKeepers, drafted: nextDrafted, playerMeta };
+        return { ...prev, keepers: nextKeepers, drafted: nextDrafted, interestByStrategy };
       });
     },
     [update]
@@ -391,7 +427,14 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
       update((prev) => {
         const next = prev.strategies.filter((s) => s.id !== id);
         const strategies = next.length ? next : DEFAULT_STRATEGIES;
-        return { ...prev, strategies, activeStrategyId: prev.activeStrategyId === id ? "preset-balanced" : prev.activeStrategyId };
+        const interestByStrategy = { ...prev.interestByStrategy };
+        delete interestByStrategy[id];
+        return {
+          ...prev,
+          strategies,
+          interestByStrategy,
+          activeStrategyId: prev.activeStrategyId === id ? "preset-balanced" : prev.activeStrategyId,
+        };
       });
     },
     [update]
@@ -410,11 +453,7 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
     <div style={styles.app}>
       <style>{fontImport}</style>
 
-      <div style={styles.header}>
-        <div>
-          <div style={styles.eyebrow}>AUCTION WAR ROOM — 2026</div>
-          <div style={styles.title}>Superflex Cheat Sheet</div>
-        </div>
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
         <button style={styles.iconBtn} onClick={() => setShowSettings((s) => !s)}>
           ⚙
         </button>
@@ -477,17 +516,19 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
 
       {tab === "board" && (
         <>
-          <div style={styles.chipRow}>
-            <span style={{ fontSize: 11, color: "#8B92A0", alignSelf: "center", marginRight: 2 }}>Strategy:</span>
-            {d.strategies.map((s) => (
-              <button
-                key={s.id}
-                style={s.id === d.activeStrategyId ? { ...styles.chip, ...chipActive("ALL") } : styles.chip}
-                onClick={() => selectStrategy(s.id)}
-              >
-                {s.name}
-              </button>
-            ))}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+            <span style={{ fontSize: 11, color: "#8B92A0", flexShrink: 0 }}>Strategy</span>
+            <select
+              style={{ ...styles.select, flex: 1 }}
+              value={d.activeStrategyId}
+              onChange={(e) => selectStrategy(e.target.value)}
+            >
+              {d.strategies.map((s) => (
+                <option key={s.id} value={s.id} style={{ background: "#1C2128", color: "#EDEEF0" }}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
           </div>
 
           {endgameSuggested && (
@@ -587,7 +628,7 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
                     style={{ ...styles.th, ...styles.thSticky, cursor: "pointer", color: sortKey === "adp" ? "#EDEEF0" : "#8B92A0" }}
                     onClick={() => setSortKey("adp")}
                   >
-                    Rank{sortKey === "adp" ? " ▾" : ""}
+                    Rk{sortKey === "adp" ? " ▾" : ""}
                   </th>
                   <th style={{ ...styles.th, ...styles.thSticky2 }}>Player</th>
                   <th
@@ -636,6 +677,7 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
                           onPaid={setPaid}
                           onMeta={setMeta}
                           onStatus={setStatus}
+                          onRate={setInterest}
                           onKeeperCost={setKeeperCost}
                         />
                         {breakIndex !== -1 && (
@@ -674,7 +716,7 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
           onName={setStrategyName}
           onAdd={addStrategy}
           onDelete={deleteStrategy}
-          onStatus={setStatus}
+          onRate={setInterest}
         />
       )}
 

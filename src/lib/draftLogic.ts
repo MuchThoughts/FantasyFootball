@@ -94,9 +94,13 @@ export interface DraftedEntry {
   mine: boolean;
 }
 
+export type Interest = "love" | "like" | "neutral" | "dislike";
+
 export interface PlayerMetaEntry {
   max?: number | "";
-  interest?: "love" | "like" | "neutral" | "dislike";
+  // Legacy: interest used to live here globally. It's now per-strategy in
+  // DraftData.interestByStrategy; this field is only read once, to migrate old data.
+  interest?: Interest;
 }
 
 export interface DraftData {
@@ -104,6 +108,9 @@ export interface DraftData {
   keepers: Record<string, KeeperEntry>;
   drafted: Record<string, DraftedEntry>;
   playerMeta: Record<string, PlayerMetaEntry>;
+  // Interest ratings (love/like/dislike) are scoped per strategy: playerId -> interest,
+  // keyed by strategyId. Switching strategy shows that strategy's own ratings.
+  interestByStrategy: Record<string, Record<string, Interest>>;
   tierOverrides: Record<string, number[]>;
   customPlayers: Player[];
   strategies: Strategy[];
@@ -130,7 +137,7 @@ export interface BoardRow {
   mine: boolean;
   live: number | null;
   max: number | "";
-  interest: "love" | "like" | "neutral" | "dislike";
+  interest: Interest;
 }
 
 export interface Board {
@@ -191,7 +198,8 @@ export function computeBoard(
   allPlayers: Player[],
   playerMeta: Record<string, PlayerMetaEntry>,
   tierOverrides: Record<string, number[]>,
-  activeStrategy: Strategy | undefined
+  activeStrategy: Strategy | undefined,
+  activeInterest: Record<string, Interest>
 ): Board {
   const totalBudget = settings.teams * settings.budget;
   const keeperList = Object.entries(keepers).map(([id, k]) => ({ id, ...k }));
@@ -275,7 +283,7 @@ export function computeBoard(
         mine: !!k.mine,
         live: null,
         max: meta.max ?? "",
-        interest: meta.interest ?? "neutral",
+        interest: activeInterest[r.id] ?? "neutral",
       };
     }
     const d = drafted[r.id];
@@ -290,7 +298,7 @@ export function computeBoard(
       mine: d ? !!d.mine : false,
       live,
       max: meta.max ?? "",
-      interest: meta.interest ?? "neutral",
+      interest: activeInterest[r.id] ?? "neutral",
     };
   });
 

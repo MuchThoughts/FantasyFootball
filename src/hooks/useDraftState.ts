@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import { DraftData, defaultSettings } from "@/lib/draftLogic";
+import { DraftData, Interest, defaultSettings } from "@/lib/draftLogic";
 import { DEFAULT_STRATEGIES } from "@/lib/data/strategies";
 
 export function defaultDraftData(): DraftData {
@@ -11,11 +11,26 @@ export function defaultDraftData(): DraftData {
     keepers: {},
     drafted: {},
     playerMeta: {},
+    interestByStrategy: {},
     tierOverrides: {},
     customPlayers: [],
     strategies: DEFAULT_STRATEGIES,
     activeStrategyId: "preset-balanced",
   };
+}
+
+// Interest ratings moved from global playerMeta to per-strategy. For states saved
+// before that change, fold any legacy global interest into the active strategy so
+// the user doesn't lose their ratings on first load.
+function migrateInterest(state: DraftData): DraftData {
+  if (state.interestByStrategy && Object.keys(state.interestByStrategy).length > 0) return state;
+  const legacy: Record<string, Interest> = {};
+  for (const [id, meta] of Object.entries(state.playerMeta || {})) {
+    const iv = meta?.interest;
+    if (iv && iv !== "neutral") legacy[id] = iv;
+  }
+  if (Object.keys(legacy).length === 0) return state;
+  return { ...state, interestByStrategy: { [state.activeStrategyId]: legacy } };
 }
 
 export type SaveState = "idle" | "saving" | "saved" | "error";
@@ -70,7 +85,7 @@ export function useDraftState(profileId: string | null) {
       if (cancelled) return;
 
       if (row && row.state && Object.keys(row.state as object).length > 0) {
-        const merged = { ...defaultDraftData(), ...(row.state as Partial<DraftData>) };
+        const merged = migrateInterest({ ...defaultDraftData(), ...(row.state as Partial<DraftData>) });
         lastSyncedJson.current = canonicalJson(merged);
         setData(merged);
       } else {
@@ -95,7 +110,7 @@ export function useDraftState(profileId: string | null) {
         (payload) => {
           const newState = (payload.new as { state?: Partial<DraftData> } | null)?.state;
           if (!newState) return;
-          const merged = { ...defaultDraftData(), ...newState };
+          const merged = migrateInterest({ ...defaultDraftData(), ...newState });
           const json = canonicalJson(merged);
           if (json === lastSyncedJson.current) return; // echo of our own write
           lastSyncedJson.current = json;

@@ -1,6 +1,7 @@
 "use client";
 
-import { BoardRow as BoardRowType, POS_COLOR, STATUS_OPTIONS, tierColor } from "@/lib/draftLogic";
+import { BoardRow as BoardRowType, Interest, POS_COLOR, STATUS_OPTIONS, tierColor } from "@/lib/draftLogic";
+import { usePlayerRating } from "@/hooks/usePlayerRating";
 import { styles } from "./styles";
 
 interface BoardRowProps {
@@ -10,10 +11,13 @@ interface BoardRowProps {
   onPaid: (row: BoardRowType, value: string) => void;
   onMeta: (id: string, field: "max", value: string) => void;
   onStatus: (row: BoardRowType, value: string) => void;
+  onRate: (row: BoardRowType, value: Interest) => void;
   onKeeperCost: (row: BoardRowType, value: string) => void;
 }
 
-export function BoardRow({ row, tierBreak, isTarget, onPaid, onMeta, onStatus, onKeeperCost }: BoardRowProps) {
+export function BoardRow({ row, tierBreak, isTarget, onPaid, onMeta, onStatus, onRate, onKeeperCost }: BoardRowProps) {
+  const { pressing, handlers } = usePlayerRating(row.interest, (v) => onRate(row, v));
+  const nameClickable = !row.isKeeper && !row.isDrafted && !row.mine;
   const statusValue = row.isKeeper
     ? row.mine
       ? "keeper-mine"
@@ -53,12 +57,35 @@ export function BoardRow({ row, tierBreak, isTarget, onPaid, onMeta, onStatus, o
         </span>
       </td>
       <td style={{ ...styles.td, ...styles.tdSticky2, ...tBreakStyle, ...bgStyle }}>
-        <div style={styles.tdPlayerName}>
-          {row.name} {isTarget && !dimmed && <span style={styles.targetStar}>★</span>}
-        </div>
-        <div style={styles.tdPlayerMeta}>
-          {row.team ? row.team + " · " : ""}ADP {row.adp}
-        </div>
+        {nameClickable ? (
+          <div
+            {...handlers}
+            title="Click = Like, double-click = Love, press and hold = Dislike (click again to undo)"
+            style={{
+              cursor: "pointer",
+              borderRadius: 4,
+              padding: "1px 3px",
+              margin: "-1px -3px",
+              background: pressing ? "rgba(168, 58, 52, 0.35)" : "transparent",
+              transition: "background 0.1s ease",
+              userSelect: "none",
+              WebkitUserSelect: "none",
+              touchAction: "manipulation",
+            }}
+          >
+            <div style={styles.tdPlayerName}>{row.name}</div>
+            <div style={styles.tdPlayerMeta}>
+              {row.team ? row.team + " · " : ""}ADP {row.adp}
+            </div>
+          </div>
+        ) : (
+          <>
+            <div style={styles.tdPlayerName}>{row.name}</div>
+            <div style={styles.tdPlayerMeta}>
+              {row.team ? row.team + " · " : ""}ADP {row.adp}
+            </div>
+          </>
+        )}
       </td>
       <td style={{ ...styles.td, ...tBreakStyle, ...bgStyle }}>
         <span style={{ ...styles.posTagSm, background: POS_COLOR[row.pos] }}>{row.pos}</span>
