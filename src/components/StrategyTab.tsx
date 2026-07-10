@@ -124,6 +124,23 @@ export function StrategyTab({
           </button>
         </div>
 
+        {active.description && (
+          <div
+            style={{
+              fontSize: 12,
+              color: "#A7ADBA",
+              lineHeight: 1.55,
+              background: "rgba(91, 155, 213, 0.07)",
+              border: "1px solid rgba(91, 155, 213, 0.2)",
+              borderRadius: 6,
+              padding: "8px 10px",
+              marginBottom: 10,
+            }}
+          >
+            {active.description}
+          </div>
+        )}
+
         <div style={{ fontSize: 11, color: "#8B92A0", marginBottom: 10 }}>
           Click a target to mark Like, double-click for Love, press and hold to Dislike (swaps in the next closest
           player).
