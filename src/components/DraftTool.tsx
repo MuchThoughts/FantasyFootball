@@ -10,10 +10,12 @@ import {
   BoardRow as BoardRowType,
   Interest,
   computeBoard,
+  computeMarketRead,
   computeStrategySlots,
   computeStrategyTargets,
   fmtMoney,
   POSITIONS,
+  recommendStrategy,
   suggestSlotAmount,
   tierColor,
 } from "@/lib/draftLogic";
@@ -24,6 +26,7 @@ import { ProfileBar } from "./ProfileBar";
 import { BoardRow } from "./BoardRow";
 import { TierDivider } from "./TierDivider";
 import { StrategyTab } from "./StrategyTab";
+import { MarketReadPanel } from "./MarketReadPanel";
 import { InsightsTab } from "./InsightsTab";
 import { OffensesTab } from "./OffensesTab";
 
@@ -132,6 +135,12 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
 
   const strategySlots = useMemo(() => computeStrategySlots(activeStrategy), [activeStrategy]);
   const strategyTargets = useMemo(() => computeStrategyTargets(board, strategySlots), [board, strategySlots]);
+
+  const marketRead = useMemo(() => computeMarketRead(board), [board]);
+  const recommendation = useMemo(
+    () => recommendStrategy(marketRead, d.strategies, d.activeStrategyId),
+    [marketRead, d.strategies, d.activeStrategyId]
+  );
 
   const offenseRows = useMemo(() => {
     const rows = Object.entries(OFFENSE_DATA).map(([team, od]) => ({
@@ -535,6 +544,14 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
               ))}
             </select>
           </div>
+
+          <MarketReadPanel
+            read={marketRead}
+            recommendation={recommendation}
+            activeStrategyId={d.activeStrategyId}
+            activeStrategyName={activeStrategy?.name ?? ""}
+            onSwitch={selectStrategy}
+          />
 
           {endgameSuggested && (
             <div style={styles.endgameBanner}>

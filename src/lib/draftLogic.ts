@@ -366,6 +366,115 @@ export const STATUS_OPTIONS = [
   { value: "keeper-mine", label: "My Keeper", color: "#5B3F8A", text: "#EDEEF0" },
 ] as const;
 
+// A player whose league-history target is at least this much counts as "top talent"
+// for the stars-vs-depth market signal.
+const STAR_TARGET_MIN = 20;
+// Signals need at least this many purchases behind them before they're shown/used.
+const MIN_SIGNAL_SAMPLES = 2;
+// The whole market read stays hidden until this many priced picks are in.
+export const MIN_MARKET_SAMPLES = 5;
+
+export interface MarketRead {
+  samples: number; // priced, drafted players with a known target
+  overall: number; // total paid / total target across all samples
+  posInflation: Partial<Record<Pos, { ratio: number; n: number }>>;
+  stars: { ratio: number; n: number } | null; // players with target >= STAR_TARGET_MIN
+}
+
+// How the room is actually paying relative to this league's historical targets,
+// overall / per position / for top-shelf players.
+export function computeMarketRead(board: Board): MarketRead {
+  const sold = board.rows.filter((r) => !r.isKeeper && r.isDrafted && r.target != null && r.paid !== "");
+  const sum = (rows: BoardRow[], f: (r: BoardRow) => number) => rows.reduce((s, r) => s + f(r), 0);
+  const ratioOf = (rows: BoardRow[]) => {
+    const t = sum(rows, (r) => Number(r.target) || 0);
+    return t > 0 ? sum(rows, (r) => Number(r.paid) || 0) / t : 1;
+  };
+
+  const posInflation: MarketRead["posInflation"] = {};
+  POSITIONS.forEach((pos) => {
+    const rows = sold.filter((r) => r.pos === pos);
+    if (rows.length > 0) posInflation[pos] = { ratio: ratioOf(rows), n: rows.length };
+  });
+
+  const starRows = sold.filter((r) => (Number(r.target) || 0) >= STAR_TARGET_MIN);
+  return {
+    samples: sold.length,
+    overall: sold.length > 0 ? ratioOf(sold) : 1,
+    posInflation,
+    stars: starRows.length > 0 ? { ratio: ratioOf(starRows), n: starRows.length } : null,
+  };
+}
+
+export interface StrategyRecommendation {
+  bestId: string;
+  bestName: string;
+  margin: number; // score gap between best and the active strategy, in budget fraction
+  reasons: string[];
+  // Qualitative advice from the stars signal, shown even when no strategy in the list
+  // is configured top-heavy enough for the scores to separate on that axis.
+  hint: string | null;
+  scores: Record<string, number>;
+}
+
+// Scores each strategy against the market read: a strategy is favored when its budget
+// is weighted toward positions/tiers the room is underpaying for, and away from where
+// it's overpaying. Score units ≈ fraction of budget saved vs. paying target everywhere.
+export function recommendStrategy(
+  read: MarketRead,
+  strategies: Strategy[],
+  activeStrategyId: string
+): StrategyRecommendation | null {
+  if (read.samples < MIN_MARKET_SAMPLES || strategies.length < 2) return null;
+
+  const scores: Record<string, number> = {};
+  for (const s of strategies) {
+    const total = s.slots.reduce((sum, sl) => sum + (Number(sl.amount) || 0), 0) || 1;
+    let expectedCost = 0;
+    POSITIONS.forEach((pos) => {
+      const share = s.slots.filter((sl) => sl.pos === pos).reduce((sum, sl) => sum + (Number(sl.amount) || 0), 0) / total;
+      const p = read.posInflation[pos];
+      const infl = p && p.n >= MIN_SIGNAL_SAMPLES ? p.ratio : read.overall;
+      expectedCost += share * infl;
+    });
+    let score = 1 - expectedCost;
+    if (read.stars && read.stars.n >= MIN_SIGNAL_SAMPLES) {
+      // Reward/punish budget concentration in star-priced slots on top of the position
+      // signal — this is what separates Stars & Scrubs from a balanced build.
+      const starsShare =
+        s.slots.filter((sl) => (Number(sl.amount) || 0) >= STAR_TARGET_MIN).reduce((sum, sl) => sum + (Number(sl.amount) || 0), 0) /
+        total;
+      score += 0.6 * starsShare * (1 - read.stars.ratio);
+    }
+    scores[s.id] = score;
+  }
+
+  let best = strategies[0];
+  for (const s of strategies) if (scores[s.id] > scores[best.id]) best = s;
+
+  const reasons: string[] = [];
+  const fmtDelta = (ratio: number) => `${ratio >= 1 ? "+" : "−"}${Math.abs(Math.round((ratio - 1) * 100))}%`;
+  const posSignals = POSITIONS.filter((pos) => {
+    const p = read.posInflation[pos];
+    return p && p.n >= MIN_SIGNAL_SAMPLES && Math.abs(p.ratio - 1) >= 0.08;
+  }).sort((a, b) => Math.abs((read.posInflation[b]?.ratio ?? 1) - 1) - Math.abs((read.posInflation[a]?.ratio ?? 1) - 1));
+  posSignals.slice(0, 3).forEach((pos) => {
+    const p = read.posInflation[pos]!;
+    reasons.push(`${pos}s going ${fmtDelta(p.ratio)} vs. target (${p.n} sold)`);
+  });
+  let hint: string | null = null;
+  if (read.stars && read.stars.n >= MIN_SIGNAL_SAMPLES && Math.abs(read.stars.ratio - 1) >= 0.08) {
+    reasons.push(`Top talent (target ≥ $${STAR_TARGET_MIN}) going ${fmtDelta(read.stars.ratio)} (${read.stars.n} sold)`);
+    hint =
+      read.stars.ratio < 1
+        ? "Top talent is going cheap — lean stars & scrubs: concentrate budget in your top slots."
+        : "Top talent is pricey — lean value: spread budget deeper and skip the early bidding wars.";
+  }
+
+  const activeScore = scores[activeStrategyId] ?? scores[best.id];
+  return { bestId: best.id, bestName: best.name, margin: scores[best.id] - activeScore, reasons, hint, scores };
+}
+
 export function computeStrategyTargets(board: Board, strategySlots: Record<Pos, number>): StrategyTargets {
   const targetIds = new Set<string>();
   const sums: Record<string, number> = {};
