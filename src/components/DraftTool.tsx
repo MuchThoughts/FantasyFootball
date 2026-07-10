@@ -12,7 +12,6 @@ import {
   computeStrategySlots,
   computeStrategyTargets,
   fmtMoney,
-  fmtPct,
   POSITIONS,
   suggestSlotAmount,
   tierColor,
@@ -354,9 +353,6 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
     );
   }
 
-  const inflationColor = board.inflation > 1.08 ? "#E1524B" : board.inflation < 0.92 ? "#4CAF6B" : "#E8A33D";
-  const paceColor = board.paceDelta > 5 ? "#E1524B" : board.paceDelta < -5 ? "#4CAF6B" : "#EDEEF0";
-
   return (
     <div style={styles.app}>
       <style>{fontImport}</style>
@@ -410,29 +406,6 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
           </button>
         </div>
       )}
-
-      <div style={styles.dashboard}>
-        <div style={styles.statBlock}>
-          <div style={styles.statLabel}>Pool left</div>
-          <div style={styles.statValue}>{fmtMoney(board.remainingPool)}</div>
-          <div style={styles.statSub}>of {fmtMoney(board.availablePool)}</div>
-        </div>
-        <div style={styles.statBlock}>
-          <div style={styles.statLabel}>Inflation</div>
-          <div style={{ ...styles.statValue, color: inflationColor }}>{fmtPct(board.inflation - 1)}</div>
-          <div style={styles.statSub}>vs. target prices</div>
-        </div>
-        <div style={styles.statBlock}>
-          <div style={styles.statLabel}>My budget</div>
-          <div style={styles.statValue}>{fmtMoney(board.myBudgetRemaining)}</div>
-          <div style={styles.statSub}>{board.mySlotsRemaining} slots left</div>
-        </div>
-        <div style={styles.statBlock}>
-          <div style={styles.statLabel}>My pace</div>
-          <div style={{ ...styles.statValue, color: paceColor }}>{board.myDrafted.length > 0 ? fmtMoney(board.paceDelta) : "—"}</div>
-          <div style={styles.statSub}>{board.myDrafted.length > 0 ? "vs. target" : "no picks yet"}</div>
-        </div>
-      </div>
 
       <div style={styles.tabs}>
         <button style={tab === "board" ? styles.tabActive : styles.tab} onClick={() => setTab("board")}>

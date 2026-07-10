@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, Fragment } from "react";
+import { useMemo } from "react";
 import { Strategy } from "@/lib/data/strategies";
 import { BoardRow, FIXED_SLOT_POS, fmtMoney, POS_COLOR, POSITIONS, Pos, slotLabel } from "@/lib/draftLogic";
 import { styles, chipActive } from "./styles";
@@ -18,6 +18,9 @@ interface StrategyTabProps {
   onDelete: (id: string) => void;
 }
 
+const STARTER_IDS = new Set(["qb1", "qb2", "rb1", "rb2", "wr1", "wr2", "te", "def"]);
+const FLEX_IDS = new Set(["flex1", "flex2"]);
+
 export function StrategyTab({
   strategies,
   activeStrategyId,
@@ -33,9 +36,8 @@ export function StrategyTab({
   const active = strategies.find((s) => s.id === activeStrategyId) || strategies[0];
 
   const total = active.slots.reduce((s, sl) => s + (Number(sl.amount) || 0), 0);
-  const starterIds = new Set(["qb1", "qb2", "rb1", "rb2", "wr1", "wr2", "te", "def", "flex1", "flex2"]);
   const starterTotal = active.slots
-    .filter((sl) => starterIds.has(sl.id))
+    .filter((sl) => STARTER_IDS.has(sl.id) || FLEX_IDS.has(sl.id))
     .reduce((s, sl) => s + (Number(sl.amount) || 0), 0);
   const benchTotal = total - starterTotal;
   const posTotals: Record<string, number> = { QB: 0, RB: 0, WR: 0, TE: 0, DEF: 0 };
@@ -56,6 +58,57 @@ export function StrategyTab({
     const amt = Number(amount);
     if (!list.length || !amt) return [];
     return [...list].sort((a, b) => Math.abs((a.target as number) - amt) - Math.abs((b.target as number) - amt)).slice(0, 5);
+  };
+
+  const budgetColor = total === budget ? "#4CAF6B" : total > budget ? "#E1524B" : "#E8A33D";
+  const budgetPct = budget ? Math.min(100, Math.round((100 * total) / budget)) : 0;
+
+  const starterGroup = active.slots.filter((sl) => STARTER_IDS.has(sl.id));
+  const flexGroup = active.slots.filter((sl) => FLEX_IDS.has(sl.id));
+  const benchGroup = active.slots.filter((sl) => sl.id.startsWith("bench"));
+
+  const renderSlot = (sl: Strategy["slots"][number]) => {
+    const fixed = !!FIXED_SLOT_POS[sl.id];
+    const options: Pos[] = sl.id.startsWith("flex") ? (["RB", "WR", "TE"] as Pos[]) : POSITIONS;
+    const comps = closestPlayers(sl.pos, sl.amount);
+    return (
+      <div key={sl.id} style={styles.slotRow}>
+        <span style={styles.slotRowLabel}>{slotLabel(sl.id)}</span>
+        {fixed ? (
+          <span style={{ ...styles.posTagSm, background: POS_COLOR[sl.pos] }}>{sl.pos}</span>
+        ) : (
+          <select
+            style={{ ...styles.statusSelect, width: 60 }}
+            value={sl.pos}
+            onChange={(e) => onSlotPos(active.id, sl.id, e.target.value)}
+          >
+            {options.map((p) => (
+              <option key={p} value={p} style={{ background: "#1C2128", color: "#EDEEF0" }}>
+                {p}
+              </option>
+            ))}
+          </select>
+        )}
+        <input
+          style={{ ...styles.cellInput, marginLeft: "auto" }}
+          type="number"
+          value={sl.amount}
+          onChange={(e) => onSlotAmount(active.id, sl.id, e.target.value)}
+        />
+        {comps.length > 0 && (
+          <div style={{ ...styles.slotRowComp, flexBasis: "100%" }}>
+            <span style={styles.compLabel}>≈ ${sl.amount} gets you:</span>{" "}
+            {comps.map((c, i) => (
+              <span key={c.id}>
+                {c.name}
+                <span style={styles.compPrice}> (${c.target})</span>
+                {i < comps.length - 1 ? ", " : ""}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -83,89 +136,17 @@ export function StrategyTab({
           </button>
         </div>
 
-        <div style={styles.tableWrap}>
-          <table style={styles.table}>
-            <thead>
-              <tr>
-                <th style={styles.th}>Slot</th>
-                <th style={styles.th}>Pos</th>
-                <th style={styles.th}>$</th>
-              </tr>
-            </thead>
-            <tbody>
-              {active.slots.map((sl) => {
-                const fixed = !!FIXED_SLOT_POS[sl.id];
-                const options: Pos[] = sl.id.startsWith("flex") ? (["RB", "WR", "TE"] as Pos[]) : POSITIONS;
-                const comps = closestPlayers(sl.pos, sl.amount);
-                return (
-                  <Fragment key={sl.id}>
-                    <tr>
-                      <td style={styles.td}>
-                        <span style={{ fontSize: 12 }}>{slotLabel(sl.id)}</span>
-                      </td>
-                      <td style={styles.td}>
-                        {fixed ? (
-                          <span style={{ ...styles.posTagSm, background: POS_COLOR[sl.pos] }}>{sl.pos}</span>
-                        ) : (
-                          <select
-                            style={{ ...styles.statusSelect, width: 60 }}
-                            value={sl.pos}
-                            onChange={(e) => onSlotPos(active.id, sl.id, e.target.value)}
-                          >
-                            {options.map((p) => (
-                              <option key={p} value={p} style={{ background: "#1C2128", color: "#EDEEF0" }}>
-                                {p}
-                              </option>
-                            ))}
-                          </select>
-                        )}
-                      </td>
-                      <td style={styles.td}>
-                        <input
-                          style={styles.cellInput}
-                          type="number"
-                          value={sl.amount}
-                          onChange={(e) => onSlotAmount(active.id, sl.id, e.target.value)}
-                        />
-                      </td>
-                    </tr>
-                    {comps.length > 0 && (
-                      <tr>
-                        <td colSpan={3} style={styles.compRow}>
-                          <span style={styles.compLabel}>≈ ${sl.amount} gets you:</span>{" "}
-                          {comps.map((c, i) => (
-                            <span key={c.id}>
-                              {c.name}
-                              <span style={styles.compPrice}> (${c.target})</span>
-                              {i < comps.length - 1 ? ", " : ""}
-                            </span>
-                          ))}
-                        </td>
-                      </tr>
-                    )}
-                  </Fragment>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-
-        <div style={{ marginTop: 14 }}>
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              fontSize: 13,
-              fontWeight: 600,
-              color: total === budget ? "#4CAF6B" : total > budget ? "#E1524B" : "#E8A33D",
-            }}
-          >
-            <span>Total allocated</span>
-            <span>
-              {fmtMoney(total)} / {fmtMoney(budget)}
+        <div style={styles.budgetSummary}>
+          <div style={styles.budgetSummaryTop}>
+            <span style={styles.budgetSummaryLabel}>Total allocated</span>
+            <span style={{ ...styles.budgetSummaryValue, color: budgetColor }}>
+              {fmtMoney(total)} <span style={{ color: "#8B92A0", fontWeight: 400, fontSize: 13 }}>/ {fmtMoney(budget)}</span>
             </span>
           </div>
-          <div style={{ fontSize: 11, color: "#8B92A0", marginTop: 2 }}>
+          <div style={styles.barTrack}>
+            <div style={{ ...styles.barFill, width: `${budgetPct}%`, background: budgetColor }} />
+          </div>
+          <div style={styles.barCaption}>
             {total === budget
               ? "Exactly on budget"
               : total > budget
@@ -174,33 +155,62 @@ export function StrategyTab({
           </div>
         </div>
 
-        <div style={{ marginTop: 12 }}>
-          <div style={styles.panelTitle}>Starters vs. bench</div>
-          <div style={styles.allocRow}>
-            <div style={styles.allocChip}>
-              Starters {fmtMoney(starterTotal)}{" "}
-              <span style={styles.allocDollar}>({total ? Math.round((100 * starterTotal) / total) : 0}%)</span>
-            </div>
-            <div style={styles.allocChip}>
-              Bench {fmtMoney(benchTotal)}{" "}
-              <span style={styles.allocDollar}>({total ? Math.round((100 * benchTotal) / total) : 0}%)</span>
-            </div>
-          </div>
-        </div>
-
-        <div style={{ marginTop: 12 }}>
+        <div style={styles.subPanel}>
           <div style={styles.panelTitle}>By position</div>
-          <div style={styles.allocRow}>
+          <div style={styles.barTrack}>
+            {POSITIONS.map((p) =>
+              posTotals[p] > 0 ? (
+                <div
+                  key={p}
+                  style={{ ...styles.barFill, width: `${total ? (100 * posTotals[p]) / total : 0}%`, background: POS_COLOR[p] }}
+                />
+              ) : null
+            )}
+          </div>
+          <div style={styles.legendRow}>
             {POSITIONS.map((p) => (
-              <div key={p} style={styles.allocChip}>
-                <span style={{ color: POS_COLOR[p] }}>{p}</span> {fmtMoney(posTotals[p])}{" "}
-                <span style={styles.allocDollar}>({total ? Math.round((100 * posTotals[p]) / total) : 0}%)</span>
-              </div>
+              <span key={p} style={styles.legendItem}>
+                <span style={{ ...styles.legendDot, background: POS_COLOR[p] }} />
+                {p} {fmtMoney(posTotals[p])} <span style={{ color: "#8B92A0" }}>({total ? Math.round((100 * posTotals[p]) / total) : 0}%)</span>
+              </span>
             ))}
           </div>
         </div>
 
-        <div style={{ fontSize: 11, color: "#8B92A0", marginTop: 12 }}>
+        <div style={styles.subPanel}>
+          <div style={styles.panelTitle}>Starters vs. bench</div>
+          <div style={styles.barTrack}>
+            <div style={{ ...styles.barFill, width: `${total ? (100 * starterTotal) / total : 0}%`, background: "#5B9BD5" }} />
+            <div style={{ ...styles.barFill, width: `${total ? (100 * benchTotal) / total : 0}%`, background: "#8B92A0" }} />
+          </div>
+          <div style={styles.legendRow}>
+            <span style={styles.legendItem}>
+              <span style={{ ...styles.legendDot, background: "#5B9BD5" }} />
+              Starters {fmtMoney(starterTotal)} <span style={{ color: "#8B92A0" }}>({total ? Math.round((100 * starterTotal) / total) : 0}%)</span>
+            </span>
+            <span style={styles.legendItem}>
+              <span style={{ ...styles.legendDot, background: "#8B92A0" }} />
+              Bench {fmtMoney(benchTotal)} <span style={{ color: "#8B92A0" }}>({total ? Math.round((100 * benchTotal) / total) : 0}%)</span>
+            </span>
+          </div>
+        </div>
+
+        <div style={styles.slotSection}>
+          <div style={styles.slotSectionTitle}>Starters</div>
+          {starterGroup.map(renderSlot)}
+        </div>
+
+        <div style={styles.slotSection}>
+          <div style={styles.slotSectionTitle}>Flex</div>
+          {flexGroup.map(renderSlot)}
+        </div>
+
+        <div style={styles.slotSection}>
+          <div style={styles.slotSectionTitle}>Bench</div>
+          {benchGroup.map(renderSlot)}
+        </div>
+
+        <div style={{ fontSize: 11, color: "#8B92A0", marginTop: 16 }}>
           Whichever strategy is active highlights its target players (the cheapest-to-priciest available players
           needed to fill these slots) on the Board tab.
         </div>
