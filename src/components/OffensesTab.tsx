@@ -29,13 +29,7 @@ function RankedList({
   return (
     <div style={{ marginTop: 20 }}>
       <div style={styles.panelTitle}>{title}</div>
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(170px, 1fr))",
-          gap: 4,
-        }}
-      >
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
         {items.map(({ rank, team, score }) => {
           // Green at the top, red at the bottom, muted through the middle.
           const color = rank <= 8 ? "#4CAF6B" : rank <= 16 ? "#8FCB9E" : rank <= 24 ? "#8B92A0" : "#E1524B";
