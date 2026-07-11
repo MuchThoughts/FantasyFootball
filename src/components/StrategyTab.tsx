@@ -96,7 +96,12 @@ export function StrategyTab({
     const list = byPos[pos] || [];
     const amt = Number(amount);
     if (!list.length || !amt) return [];
-    return [...list].sort((a, b) => Math.abs((a.target as number) - amt) - Math.abs((b.target as number) - amt)).slice(0, 5);
+    // Pick the 5 players nearest the slot's dollar amount, then list them
+    // most expensive to least expensive.
+    return [...list]
+      .sort((a, b) => Math.abs((a.target as number) - amt) - Math.abs((b.target as number) - amt))
+      .slice(0, 5)
+      .sort((a, b) => (b.target as number) - (a.target as number));
   };
 
   return (
