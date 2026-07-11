@@ -84,26 +84,40 @@ export function StrategyTab({
   const myKeepers = useMemo(() => boardRows.filter((r) => r.isKeeper && r.mine), [boardRows]);
   const eligibleKeepers = useMemo(() => boardRows.filter((r) => !r.isDrafted && !r.isKeeper), [boardRows]);
 
-  // Assign each keeper to the earliest strategy slot at its position (pricier
-  // keeper first), mirroring how the Board counts keepers as filled slots.
+  // Assign each keeper to the slot at its position whose planned target price is
+  // closest to the keeper's cost — so a keeper priced like an RB2/RB3 fills that
+  // slot rather than always landing in RB1. Ties favor the higher (earlier) slot.
   const slotKeeper = useMemo(() => {
-    const byPos: Record<string, BoardRow[]> = {};
-    myKeepers.forEach((k) => {
-      (byPos[k.pos] = byPos[k.pos] || []).push(k);
-    });
-    Object.values(byPos).forEach((list) =>
-      list.sort((a, b) => (Number(b.keeperCost) || 0) - (Number(a.keeperCost) || 0))
-    );
-    const usedByPos: Record<string, number> = {};
     const map = new Map<string, BoardRow>();
+
+    const slotsByPos: Record<string, { id: string; amount: number }[]> = {};
     active.slots.forEach((sl) => {
-      const list = byPos[sl.pos];
-      if (!list) return;
-      const i = usedByPos[sl.pos] || 0;
-      if (i < list.length) {
-        map.set(sl.id, list[i]);
-        usedByPos[sl.pos] = i + 1;
-      }
+      (slotsByPos[sl.pos] = slotsByPos[sl.pos] || []).push({ id: sl.id, amount: Number(sl.amount) || 0 });
+    });
+    const keepersByPos: Record<string, BoardRow[]> = {};
+    myKeepers.forEach((k) => {
+      (keepersByPos[k.pos] = keepersByPos[k.pos] || []).push(k);
+    });
+
+    Object.entries(keepersByPos).forEach(([pos, keepers]) => {
+      const slots = slotsByPos[pos] || [];
+      // Every keeper/slot pairing, ranked by how close the keeper's cost is to
+      // the slot's target price; greedily take the closest pair first so each
+      // keeper lands in its best-fitting open slot.
+      const pairs: { ki: number; si: number; diff: number }[] = [];
+      keepers.forEach((k, ki) => {
+        const cost = Number(k.keeperCost) || 0;
+        slots.forEach((s, si) => pairs.push({ ki, si, diff: Math.abs(s.amount - cost) }));
+      });
+      pairs.sort((a, b) => a.diff - b.diff);
+      const usedK = new Set<number>();
+      const usedS = new Set<number>();
+      pairs.forEach(({ ki, si }) => {
+        if (usedK.has(ki) || usedS.has(si)) return;
+        usedK.add(ki);
+        usedS.add(si);
+        map.set(slots[si].id, keepers[ki]);
+      });
     });
     return map;
   }, [myKeepers, active.slots]);
