@@ -181,12 +181,11 @@ export function StrategyTab({
       </div>
 
       <div style={styles.panel}>
-        <div style={styles.row}>
-          <input style={{ ...styles.input, flex: 1 }} value={active.name} onChange={(e) => onName(active.id, e.target.value)} />
-          <button style={styles.dangerBtn} onClick={() => onDelete(active.id)}>
-            Delete
-          </button>
-        </div>
+        <input
+          style={{ ...styles.input, width: "100%", marginBottom: 10 }}
+          value={active.name}
+          onChange={(e) => onName(active.id, e.target.value)}
+        />
 
         {active.description && (
           <div
@@ -396,6 +395,12 @@ export function StrategyTab({
           Whichever strategy is active highlights its target players (the cheapest-to-priciest available players
           needed to fill these slots) on the Board tab, and its slot amounts set where each position&apos;s tier
           bars sit.
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
+          <button style={{ ...styles.dangerBtn, width: "auto" }} onClick={() => onDelete(active.id)}>
+            Delete strategy
+          </button>
         </div>
       </div>
     </div>
