@@ -3,7 +3,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { PLAYERS_DATA } from "@/lib/data/players";
-import { DRAFTERS_DATA } from "@/lib/data/drafters";
 import { OFFENSE_DATA } from "@/lib/data/offense";
 import { DEFAULT_STRATEGIES } from "@/lib/data/strategies";
 import {
@@ -176,8 +175,6 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
       return bv - av;
     });
   }, [offSort]);
-
-  const drafterRows = useMemo(() => Object.entries(DRAFTERS_DATA).map(([team, dd]) => ({ team, ...dd })), []);
 
   const endgameMaxBid = Math.max(board.myBudgetRemaining - Math.max(board.mySlotsRemaining - 1, 0), 0);
   const endgameSuggested = board.mySlotsRemaining > 0 && board.myBudgetRemaining <= board.mySlotsRemaining && !endgameMode;
@@ -874,7 +871,7 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
         />
       )}
 
-      {tab === "drafters" && <InsightsTab rows={drafterRows} />}
+      {tab === "drafters" && <InsightsTab />}
 
       {tab === "offenses" && <OffensesTab rows={offenseRows} sort={offSort} setSort={setOffSort} />}
 
