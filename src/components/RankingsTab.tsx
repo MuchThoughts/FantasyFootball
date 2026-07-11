@@ -12,6 +12,8 @@ import {
   parseRankingUpload,
 } from "@/lib/rankings";
 import { POS_COLOR, uid } from "@/lib/draftLogic";
+import { dropEdgeStyle, dropRank, useRowDrag } from "@/hooks/useRowDrag";
+import { DragHandle } from "./DragHandle";
 import { styles, chipActive } from "./styles";
 
 interface RankingsTabProps {
@@ -23,33 +25,6 @@ interface RankingsTabProps {
   onAddSource: (source: RankingSource) => void;
   onRenameSource: (id: string, name: string) => void;
   onDeleteSource: (id: string) => void;
-}
-
-// Rank-override editor cell: keeps its own text while focused and commits on
-// blur/Enter, because committing per keystroke would reorder the table mid-typing.
-function OverrideInput({ value, onCommit }: { value: number | null; onCommit: (v: number | null) => void }) {
-  const [text, setText] = useState<string | null>(null); // null = not editing, show prop
-  const commit = (raw: string) => {
-    setText(null);
-    const trimmed = raw.trim();
-    if (trimmed === "") return onCommit(null);
-    const n = Math.round(Number(trimmed));
-    if (Number.isFinite(n) && n >= 1) onCommit(n);
-  };
-  return (
-    <input
-      style={{ ...styles.cellInput, width: 44, borderColor: value != null ? "#E8A33D" : undefined }}
-      type="number"
-      min={1}
-      placeholder="—"
-      value={text ?? (value != null ? String(value) : "")}
-      onChange={(e) => setText(e.target.value)}
-      onBlur={(e) => commit(e.target.value)}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-      }}
-    />
-  );
 }
 
 export function RankingsTab({
@@ -71,6 +46,22 @@ export function RankingsTab({
   const selectable = useMemo(() => allSources(players, sources), [players, sources]);
   const activeSource = config.mode === "source" ? selectable.find((s) => s.id === config.activeSourceId) : undefined;
   const overrideCount = Object.keys(config.overrides).length;
+
+  // Dropping a row pins that player at the drop position (an override on top
+  // of the active source/blend). Ranks come from the effective order (adp).
+  const effRank = useMemo(() => {
+    const m = new Map<string, number>();
+    rankedPlayers.forEach((p) => m.set(uid(p.name), p.adp));
+    return m;
+  }, [rankedPlayers]);
+
+  const { drag, startDrag } = useRowDrag((dragId, overId, after) => {
+    const draggedRank = effRank.get(dragId);
+    const targetRank = effRank.get(overId);
+    if (draggedRank === undefined || targetRank === undefined) return;
+    const rank = dropRank(draggedRank, targetRank, after);
+    onConfig((prev) => ({ ...prev, overrides: { ...prev.overrides, [dragId]: rank } }));
+  });
 
   const doImport = () => {
     const parsed = parseRankingUpload(uploadText, players);
@@ -241,8 +232,8 @@ export function RankingsTab({
           )}
         </div>
         <div style={{ fontSize: 11, color: "#8B92A0", marginBottom: 8 }}>
-          Type a rank in “My Rk” to pin a player to that spot. Manual edits stay on top of whichever source or blend is
-          active — switch sources and your edits follow.
+          Drag the ⠿ handle to move a player up or down — dropping pins them to that spot. Pins stay on top of
+          whichever source or blend is active; use the ✕ to unpin one.
         </div>
         <input
           style={{ ...styles.searchInput, marginBottom: 8 }}
@@ -254,6 +245,7 @@ export function RankingsTab({
           <table style={styles.table}>
             <thead>
               <tr>
+                <th style={{ ...styles.th, width: 24 }}></th>
                 <th style={styles.th}>Rk</th>
                 <th style={{ ...styles.th, textAlign: "left" }}>Player</th>
                 <th style={styles.th}>Pos</th>
@@ -262,40 +254,59 @@ export function RankingsTab({
                     {s.id === BUILTIN_SOURCE_ID ? "ADP" : s.name.length > 10 ? s.name.slice(0, 9) + "…" : s.name}
                   </th>
                 ))}
-                <th style={styles.th}>My Rk</th>
+                <th style={styles.th}>Pin</th>
               </tr>
             </thead>
             <tbody>
               {editorRows.map((p) => {
                 const id = uid(p.name);
                 const override = config.overrides[id] ?? null;
+                const edge = dropEdgeStyle(drag, id);
+                const rowStyle: React.CSSProperties = {
+                  ...(override != null ? { background: "rgba(232, 163, 61, 0.07)" } : {}),
+                  ...(drag?.id === id ? { opacity: 0.35 } : {}),
+                };
                 return (
-                  <tr key={id} style={override != null ? { background: "rgba(232, 163, 61, 0.07)" } : undefined}>
-                    <td style={{ ...styles.td, ...styles.tdMono }}>{p.adp}</td>
-                    <td style={{ ...styles.td, textAlign: "left" }}>
+                  <tr key={id} data-dragid={id} style={rowStyle}>
+                    <td style={{ ...styles.td, ...edge, padding: 0 }}>
+                      <DragHandle onPointerDown={startDrag(id)} dragging={drag?.id === id} />
+                    </td>
+                    <td style={{ ...styles.td, ...styles.tdMono, ...edge }}>{p.adp}</td>
+                    <td style={{ ...styles.td, ...edge, textAlign: "left" }}>
                       <span style={{ fontSize: 12 }}>{p.name}</span>{" "}
                       <span style={{ fontSize: 10, color: "#8B92A0" }}>{p.team}</span>
                     </td>
-                    <td style={styles.td}>
+                    <td style={{ ...styles.td, ...edge }}>
                       <span style={{ ...styles.posTagSm, background: POS_COLOR[p.pos] }}>{p.pos}</span>
                     </td>
                     {selectable.map((s) => (
-                      <td key={s.id} style={{ ...styles.td, ...styles.tdMono, color: "#8B92A0" }}>
+                      <td key={s.id} style={{ ...styles.td, ...styles.tdMono, ...edge, color: "#8B92A0" }}>
                         {s.ranks[id] ?? "—"}
                       </td>
                     ))}
-                    <td style={styles.td}>
-                      <OverrideInput
-                        value={override}
-                        onCommit={(v) =>
-                          onConfig((prev) => {
-                            const overrides = { ...prev.overrides };
-                            if (v == null) delete overrides[id];
-                            else overrides[id] = v;
-                            return { ...prev, overrides };
-                          })
-                        }
-                      />
+                    <td style={{ ...styles.td, ...edge }}>
+                      {override != null && (
+                        <button
+                          title={`Pinned to #${override} — click to unpin`}
+                          style={{
+                            background: "transparent",
+                            border: "none",
+                            color: "#E8A33D",
+                            cursor: "pointer",
+                            fontSize: 11,
+                            padding: "2px 6px",
+                          }}
+                          onClick={() =>
+                            onConfig((prev) => {
+                              const overrides = { ...prev.overrides };
+                              delete overrides[id];
+                              return { ...prev, overrides };
+                            })
+                          }
+                        >
+                          ✕
+                        </button>
+                      )}
                     </td>
                   </tr>
                 );

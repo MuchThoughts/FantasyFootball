@@ -18,8 +18,10 @@ import {
   recommendStrategy,
   suggestSlotAmount,
   tierColor,
+  uid,
 } from "@/lib/draftLogic";
 import { BUILTIN_SOURCE_ID, BUILTIN_SOURCE_NAME, RankingConfig, RankingSource, applyRanking } from "@/lib/rankings";
+import { dropEdgeStyle, dropRank, useRowDrag } from "@/hooks/useRowDrag";
 import { useProfiles } from "@/hooks/useProfiles";
 import { defaultDraftData, useDraftState } from "@/hooks/useDraftState";
 import { styles, fontImport, chipActive } from "./styles";
@@ -390,6 +392,31 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
     [update]
   );
 
+  // Board drag-and-drop: dropping a row pins that player at the drop spot (a
+  // ranking override). Only meaningful while the board is in rank order.
+  const boardDragEnabled = sortKey === "adp" && !endgameMode;
+  const effRankById = useMemo(() => {
+    const m = new Map<string, number>();
+    allPlayers.forEach((p) => m.set(uid(p.name), p.adp));
+    return m;
+  }, [allPlayers]);
+
+  const { drag: boardDrag, startDrag: startBoardDrag } = useRowDrag(
+    useCallback(
+      (dragId: string, overId: string, after: boolean) => {
+        const draggedRank = effRankById.get(dragId);
+        const targetRank = effRankById.get(overId);
+        if (draggedRank === undefined || targetRank === undefined) return;
+        const rank = dropRank(draggedRank, targetRank, after);
+        update((prev) => ({
+          ...prev,
+          ranking: { ...prev.ranking, overrides: { ...prev.ranking.overrides, [dragId]: rank } },
+        }));
+      },
+      [effRankById, update]
+    )
+  );
+
   const setRankingConfig = useCallback(
     (updater: (prev: RankingConfig) => RankingConfig) => {
       update((prev) => ({ ...prev, ranking: updater(prev.ranking) }));
@@ -725,12 +752,20 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
               <thead>
                 <tr>
                   <th
-                    style={{ ...styles.th, ...styles.thSticky, cursor: "pointer", color: sortKey === "adp" ? "#EDEEF0" : "#8B92A0" }}
+                    style={{
+                      ...styles.th,
+                      ...styles.thSticky,
+                      ...(boardDragEnabled ? styles.stickyDragCol1 : {}),
+                      cursor: "pointer",
+                      color: sortKey === "adp" ? "#EDEEF0" : "#8B92A0",
+                    }}
                     onClick={() => setSortKey("adp")}
                   >
                     Rk{sortKey === "adp" ? " ▾" : ""}
                   </th>
-                  <th style={{ ...styles.th, ...styles.thSticky2 }}>Player</th>
+                  <th style={{ ...styles.th, ...styles.thSticky2, ...(boardDragEnabled ? styles.stickyDragCol2 : {}) }}>
+                    Player
+                  </th>
                   <th
                     style={{ ...styles.th, cursor: "pointer", color: sortKey === "pos" ? "#EDEEF0" : "#8B92A0" }}
                     onClick={() => setSortKey("pos")}
@@ -774,6 +809,10 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
                           row={row}
                           tierBreak={tierBreak}
                           isTarget={strategyTargets.targetIds.has(row.id)}
+                          dragEnabled={boardDragEnabled}
+                          dragging={boardDrag?.id === row.id}
+                          dropEdge={dropEdgeStyle(boardDrag, row.id)}
+                          onDragStart={startBoardDrag(row.id)}
                           onPaid={setPaid}
                           onMeta={setMeta}
                           onStatus={setStatus}

@@ -2,12 +2,18 @@
 
 import { BoardRow as BoardRowType, Interest, POS_COLOR, STATUS_OPTIONS, tierColor } from "@/lib/draftLogic";
 import { usePlayerRating } from "@/hooks/usePlayerRating";
+import { DragHandle } from "./DragHandle";
 import { styles } from "./styles";
 
 interface BoardRowProps {
   row: BoardRowType;
   tierBreak: boolean;
   isTarget: boolean;
+  // Row drag-and-drop (rank pinning); absent when the board isn't sorted by rank.
+  dragEnabled: boolean;
+  dragging: boolean; // this row is being dragged
+  dropEdge: React.CSSProperties; // insertion edge when this row is the drop target
+  onDragStart: (e: React.PointerEvent) => void;
   onPaid: (row: BoardRowType, value: string) => void;
   onMeta: (id: string, field: "max", value: string) => void;
   onStatus: (row: BoardRowType, value: string) => void;
@@ -15,7 +21,20 @@ interface BoardRowProps {
   onKeeperCost: (row: BoardRowType, value: string) => void;
 }
 
-export function BoardRow({ row, tierBreak, isTarget, onPaid, onMeta, onStatus, onRate, onKeeperCost }: BoardRowProps) {
+export function BoardRow({
+  row,
+  tierBreak,
+  isTarget,
+  dragEnabled,
+  dragging,
+  dropEdge,
+  onDragStart,
+  onPaid,
+  onMeta,
+  onStatus,
+  onRate,
+  onKeeperCost,
+}: BoardRowProps) {
   const { pressing, handlers } = usePlayerRating(row.interest, (v) => onRate(row, v));
   const nameClickable = !row.isKeeper && !row.isDrafted && !row.mine;
   const statusValue = row.isKeeper
@@ -29,7 +48,8 @@ export function BoardRow({ row, tierBreak, isTarget, onPaid, onMeta, onStatus, o
     : "";
   const statusOpt = STATUS_OPTIONS.find((o) => o.value === statusValue) || STATUS_OPTIONS[0];
   const dimmed = row.isDrafted || row.isKeeper || row.interest === "dislike";
-  const tBreakStyle = tierBreak ? { borderTop: `2px solid ${tierColor(row.tier)}` } : {};
+  // Drop-target edge wins over a tier break line while a drag is in flight.
+  const tBreakStyle = { ...(tierBreak ? { borderTop: `2px solid ${tierColor(row.tier)}` } : {}), ...dropEdge };
   const targetGlow = isTarget && !dimmed ? { boxShadow: "inset 3px 0 0 #4CAF6B" } : {};
   const rowTint =
     row.interest === "love" ? "rgba(76, 175, 107, 0.38)" : row.interest === "like" ? "rgba(76, 175, 107, 0.14)" : null;
@@ -48,15 +68,21 @@ export function BoardRow({ row, tierBreak, isTarget, onPaid, onMeta, onStatus, o
     }
   }
 
+  const dragCol1 = dragEnabled ? styles.stickyDragCol1 : {};
+  const dragCol2 = dragEnabled ? styles.stickyDragCol2 : {};
+
   return (
-    <tr style={{ opacity: dimmed ? 0.4 : 1 }}>
-      <td style={{ ...styles.td, ...styles.tdSticky, ...tBreakStyle, ...bgStyle, ...targetGlow }}>
-        <span style={{ ...styles.tdMono, fontSize: 11 }}>
-          {row.pos}
-          {row.effRank ?? "–"}
+    <tr data-dragid={row.id} style={{ opacity: dragging ? 0.35 : dimmed ? 0.4 : 1 }}>
+      <td style={{ ...styles.td, ...styles.tdSticky, ...dragCol1, ...tBreakStyle, ...bgStyle, ...targetGlow }}>
+        <span style={{ display: "inline-flex", alignItems: "center" }}>
+          {dragEnabled && <DragHandle onPointerDown={onDragStart} dragging={dragging} />}
+          <span style={{ ...styles.tdMono, fontSize: 11 }}>
+            {row.pos}
+            {row.effRank ?? "–"}
+          </span>
         </span>
       </td>
-      <td style={{ ...styles.td, ...styles.tdSticky2, ...tBreakStyle, ...bgStyle }}>
+      <td style={{ ...styles.td, ...styles.tdSticky2, ...dragCol2, ...tBreakStyle, ...bgStyle }}>
         {nameClickable ? (
           <div
             {...handlers}
