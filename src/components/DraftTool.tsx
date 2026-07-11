@@ -19,6 +19,7 @@ import {
   suggestSlotAmount,
   tierColor,
 } from "@/lib/draftLogic";
+import { BUILTIN_SOURCE_ID, BUILTIN_SOURCE_NAME, RankingConfig, RankingSource, applyRanking } from "@/lib/rankings";
 import { useProfiles } from "@/hooks/useProfiles";
 import { defaultDraftData, useDraftState } from "@/hooks/useDraftState";
 import { styles, fontImport, chipActive } from "./styles";
@@ -26,6 +27,7 @@ import { ProfileBar } from "./ProfileBar";
 import { BoardRow } from "./BoardRow";
 import { TierDivider } from "./TierDivider";
 import { StrategyTab } from "./StrategyTab";
+import { RankingsTab } from "./RankingsTab";
 import { MarketReadPanel } from "./MarketReadPanel";
 import { InsightsTab } from "./InsightsTab";
 import { OffensesTab } from "./OffensesTab";
@@ -104,7 +106,7 @@ interface DraftToolProps {
 function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: DraftToolProps) {
   const { data, update, loaded, saveState } = useDraftState(profileId);
 
-  const [tab, setTab] = useState<"board" | "strategy" | "drafters" | "offenses">("board");
+  const [tab, setTab] = useState<"board" | "strategy" | "rankings" | "drafters" | "offenses">("board");
   const [posFilter, setPosFilter] = useState("ALL");
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState("adp");
@@ -116,7 +118,21 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
 
   const d = data ?? defaultDraftData();
 
-  const allPlayers = useMemo(() => [...PLAYERS_DATA, ...d.customPlayers], [d.customPlayers]);
+  const basePlayers = useMemo(() => [...PLAYERS_DATA, ...d.customPlayers], [d.customPlayers]);
+
+  // The active ranking (source, blend, and manual overrides) is materialized
+  // as each player's adp, so board order, positional price targets, and tiers
+  // all follow whichever ranking is selected on the Rankings tab.
+  const allPlayers = useMemo(
+    () => applyRanking(basePlayers, d.rankingSources, d.ranking),
+    [basePlayers, d.rankingSources, d.ranking]
+  );
+
+  const rankingLabel = useMemo(() => {
+    if (d.ranking.mode === "blend") return "Blend";
+    if (d.ranking.activeSourceId === BUILTIN_SOURCE_ID) return BUILTIN_SOURCE_NAME;
+    return d.rankingSources.find((s) => s.id === d.ranking.activeSourceId)?.name ?? BUILTIN_SOURCE_NAME;
+  }, [d.ranking, d.rankingSources]);
 
   const activeStrategy = useMemo(
     () => d.strategies.find((s) => s.id === d.activeStrategyId) || d.strategies[0],
@@ -374,6 +390,58 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
     [update]
   );
 
+  const setRankingConfig = useCallback(
+    (updater: (prev: RankingConfig) => RankingConfig) => {
+      update((prev) => ({ ...prev, ranking: updater(prev.ranking) }));
+    },
+    [update]
+  );
+
+  // A fresh upload becomes the active ranking immediately — that's why you uploaded it.
+  const addRankingSource = useCallback(
+    (source: RankingSource) => {
+      update((prev) => ({
+        ...prev,
+        rankingSources: [...prev.rankingSources, source],
+        ranking: { ...prev.ranking, mode: "source", activeSourceId: source.id },
+      }));
+    },
+    [update]
+  );
+
+  const renameRankingSource = useCallback(
+    (id: string, name: string) => {
+      update((prev) => ({
+        ...prev,
+        rankingSources: prev.rankingSources.map((s) => (s.id === id ? { ...s, name } : s)),
+      }));
+    },
+    [update]
+  );
+
+  const deleteRankingSource = useCallback(
+    (id: string) => {
+      if (!window.confirm("Delete this ranking source? This can't be undone.")) return;
+      update((prev) => {
+        const rankingSources = prev.rankingSources.filter((s) => s.id !== id);
+        const weights = { ...prev.ranking.weights };
+        delete weights[id];
+        return {
+          ...prev,
+          rankingSources,
+          ranking: {
+            ...prev.ranking,
+            weights,
+            activeSourceId: prev.ranking.activeSourceId === id ? BUILTIN_SOURCE_ID : prev.ranking.activeSourceId,
+            // a blend needs at least one upload to differ from the built-in list
+            mode: prev.ranking.mode === "blend" && rankingSources.length === 0 ? "source" : prev.ranking.mode,
+          },
+        };
+      });
+    },
+    [update]
+  );
+
   const addCustomPlayer = useCallback(() => {
     const name = addForm.name.trim();
     if (!name) return;
@@ -520,6 +588,9 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
         <button style={tab === "strategy" ? styles.tabActive : styles.tab} onClick={() => setTab("strategy")}>
           Strategy
         </button>
+        <button style={tab === "rankings" ? styles.tabActive : styles.tab} onClick={() => setTab("rankings")}>
+          Rankings
+        </button>
         <button style={tab === "drafters" ? styles.tabActive : styles.tab} onClick={() => setTab("drafters")}>
           Insights
         </button>
@@ -543,6 +614,13 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
                 </option>
               ))}
             </select>
+            <button
+              style={{ ...styles.smallBtn, flexShrink: 0 }}
+              title="Active ranking — change on the Rankings tab"
+              onClick={() => setTab("rankings")}
+            >
+              Rks: {rankingLabel}
+            </button>
           </div>
 
           <MarketReadPanel
@@ -739,6 +817,19 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
           onAdd={addStrategy}
           onDelete={deleteStrategy}
           onRate={setInterest}
+        />
+      )}
+
+      {tab === "rankings" && (
+        <RankingsTab
+          players={basePlayers}
+          rankedPlayers={allPlayers}
+          sources={d.rankingSources}
+          config={d.ranking}
+          onConfig={setRankingConfig}
+          onAddSource={addRankingSource}
+          onRenameSource={renameRankingSource}
+          onDeleteSource={deleteRankingSource}
         />
       )}
 

@@ -1,6 +1,7 @@
 import { Player } from "./data/players";
 import { PRICE_CURVE } from "./data/priceCurve";
 import { Strategy } from "./data/strategies";
+import type { RankingConfig, RankingSource } from "./rankings";
 
 export type Pos = "QB" | "RB" | "WR" | "TE" | "DEF";
 
@@ -115,6 +116,10 @@ export interface DraftData {
   customPlayers: Player[];
   strategies: Strategy[];
   activeStrategyId: string;
+  // Uploaded ranking lists plus which source/blend/overrides are active —
+  // see rankings.ts. The active ranking drives board order and price targets.
+  rankingSources: RankingSource[];
+  ranking: RankingConfig;
 }
 
 export function defaultSettings(): Settings {

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { DraftData, Interest, defaultSettings } from "@/lib/draftLogic";
 import { DEFAULT_STRATEGIES, LEGACY_STRATEGIES } from "@/lib/data/strategies";
+import { defaultRankingConfig } from "@/lib/rankings";
 
 export function defaultDraftData(): DraftData {
   return {
@@ -16,6 +17,8 @@ export function defaultDraftData(): DraftData {
     customPlayers: [],
     strategies: DEFAULT_STRATEGIES,
     activeStrategyId: "preset-balanced",
+    rankingSources: [],
+    ranking: defaultRankingConfig(),
   };
 }
 
