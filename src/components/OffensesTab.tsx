@@ -1,7 +1,7 @@
 "use client";
 
 import { OffenseTeam } from "@/lib/data/offense";
-import { OLINE_RANKINGS, OLINE_RANKINGS_SOURCE, OLINE_RANKINGS_URL } from "@/lib/data/lineRankings";
+import { LineRank, OLINE_RANKINGS, OLINE_RANKINGS_SOURCE, OLINE_RANKINGS_URL } from "@/lib/data/lineRankings";
 import { styles } from "./styles";
 
 type OffenseRow = OffenseTeam & { team: string; diff25: number | null; diff24: number | null };
@@ -12,16 +12,17 @@ interface OffensesTabProps {
   setSort: (key: string) => void;
 }
 
-// A 1-to-N ranked list of team names, rendered as a two-column grid with a
-// rank badge on each row. Used for the offensive line ranking below the table.
+// A ranked list of teams (with published rank + score), rendered as a
+// two-column grid with a rank badge and score on each row. Ranks may tie.
+// Used for the offensive line ranking below the table.
 function RankedList({
   title,
-  teams,
+  items,
   source,
   sourceUrl,
 }: {
   title: string;
-  teams: string[];
+  items: LineRank[];
   source: string;
   sourceUrl: string;
 }) {
@@ -31,12 +32,11 @@ function RankedList({
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))",
+          gridTemplateColumns: "repeat(auto-fill, minmax(170px, 1fr))",
           gap: 4,
         }}
       >
-        {teams.map((team, i) => {
-          const rank = i + 1;
+        {items.map(({ rank, team, score }) => {
           // Green at the top, red at the bottom, muted through the middle.
           const color = rank <= 8 ? "#4CAF6B" : rank <= 16 ? "#8FCB9E" : rank <= 24 ? "#8B92A0" : "#E1524B";
           return (
@@ -53,24 +53,20 @@ function RankedList({
               }}
             >
               <span
-                style={{
-                  ...styles.tdMono,
-                  fontSize: 11,
-                  color,
-                  minWidth: 20,
-                  textAlign: "right",
-                  fontWeight: 700,
-                }}
+                style={{ ...styles.tdMono, fontSize: 11, color, minWidth: 20, textAlign: "right", fontWeight: 700 }}
               >
                 {rank}
               </span>
-              <span style={{ fontSize: 12.5, fontWeight: 500 }}>{team}</span>
+              <span style={{ fontSize: 12.5, fontWeight: 500, flex: 1 }}>{team}</span>
+              <span style={{ ...styles.tdMono, fontSize: 11, color: "#8B92A0" }} title="Sharp Football composite score">
+                {score}
+              </span>
             </div>
           );
         })}
       </div>
       <div style={{ ...styles.emptyState, marginTop: 8 }}>
-        Source:{" "}
+        Score is the source&apos;s 0–100 composite (higher is better). Source:{" "}
         <a href={sourceUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#5B9BD5" }}>
           {source}
         </a>
@@ -138,7 +134,7 @@ export function OffensesTab({ rows, sort, setSort }: OffensesTabProps) {
 
       <RankedList
         title="Offensive Line Rankings — 2026"
-        teams={OLINE_RANKINGS}
+        items={OLINE_RANKINGS}
         source={OLINE_RANKINGS_SOURCE}
         sourceUrl={OLINE_RANKINGS_URL}
       />
