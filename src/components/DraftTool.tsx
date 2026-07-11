@@ -856,6 +856,8 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
           onAdd={addStrategy}
           onDelete={deleteStrategy}
           onRate={setInterest}
+          onStatus={setStatus}
+          onKeeperCost={setKeeperCost}
         />
       )}
 

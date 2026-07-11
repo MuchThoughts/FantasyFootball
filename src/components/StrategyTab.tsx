@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Strategy } from "@/lib/data/strategies";
 import { BoardRow, FIXED_SLOT_POS, fmtMoney, Interest, POS_COLOR, POSITIONS, Pos, slotLabel } from "@/lib/draftLogic";
 import { usePlayerRating } from "@/hooks/usePlayerRating";
@@ -18,6 +18,10 @@ interface StrategyTabProps {
   onAdd: () => void;
   onDelete: (id: string) => void;
   onRate: (row: BoardRow, value: Interest) => void;
+  // Keeper management reuses the app's global keeper machinery (same as the
+  // Board's status dropdown), so keepers set here also show on the Board.
+  onStatus: (row: BoardRow, value: string) => void;
+  onKeeperCost: (row: BoardRow, value: string) => void;
 }
 
 // A single clickable player name: click = Like, double-click = Love, press-and-hold =
@@ -66,18 +70,73 @@ export function StrategyTab({
   onAdd,
   onDelete,
   onRate,
+  onStatus,
+  onKeeperCost,
 }: StrategyTabProps) {
   const active = strategies.find((s) => s.id === activeStrategyId) || strategies[0];
 
-  const total = active.slots.reduce((s, sl) => s + (Number(sl.amount) || 0), 0);
+  const [keeperName, setKeeperName] = useState("");
+  const [keeperCostInput, setKeeperCostInput] = useState("");
+  const [keeperError, setKeeperError] = useState<string | null>(null);
+
+  // The user's keepers (global to the profile), and any undrafted, un-kept
+  // player they can still designate as one.
+  const myKeepers = useMemo(() => boardRows.filter((r) => r.isKeeper && r.mine), [boardRows]);
+  const eligibleKeepers = useMemo(() => boardRows.filter((r) => !r.isDrafted && !r.isKeeper), [boardRows]);
+
+  // Assign each keeper to the earliest strategy slot at its position (pricier
+  // keeper first), mirroring how the Board counts keepers as filled slots.
+  const slotKeeper = useMemo(() => {
+    const byPos: Record<string, BoardRow[]> = {};
+    myKeepers.forEach((k) => {
+      (byPos[k.pos] = byPos[k.pos] || []).push(k);
+    });
+    Object.values(byPos).forEach((list) =>
+      list.sort((a, b) => (Number(b.keeperCost) || 0) - (Number(a.keeperCost) || 0))
+    );
+    const usedByPos: Record<string, number> = {};
+    const map = new Map<string, BoardRow>();
+    active.slots.forEach((sl) => {
+      const list = byPos[sl.pos];
+      if (!list) return;
+      const i = usedByPos[sl.pos] || 0;
+      if (i < list.length) {
+        map.set(sl.id, list[i]);
+        usedByPos[sl.pos] = i + 1;
+      }
+    });
+    return map;
+  }, [myKeepers, active.slots]);
+
+  // A keeper-filled slot contributes the keeper's actual cost (not the planned
+  // amount) to the budget totals.
+  const slotAmount = (sl: { id: string; amount: number }) => {
+    const k = slotKeeper.get(sl.id);
+    return k ? Number(k.keeperCost) || 0 : Number(sl.amount) || 0;
+  };
+
+  const addKeeper = () => {
+    const name = keeperName.trim().toLowerCase();
+    if (!name) return;
+    const row = boardRows.find((r) => r.name.toLowerCase() === name && !r.isDrafted);
+    if (!row) {
+      setKeeperError("No matching player found on the board.");
+      return;
+    }
+    onStatus(row, "keeper-mine");
+    if (keeperCostInput.trim() !== "") onKeeperCost(row, keeperCostInput.trim());
+    setKeeperName("");
+    setKeeperCostInput("");
+    setKeeperError(null);
+  };
+
+  const total = active.slots.reduce((s, sl) => s + slotAmount(sl), 0);
   const starterIds = new Set(["qb1", "qb2", "rb1", "rb2", "wr1", "wr2", "te", "def", "flex1", "flex2"]);
-  const starterTotal = active.slots
-    .filter((sl) => starterIds.has(sl.id))
-    .reduce((s, sl) => s + (Number(sl.amount) || 0), 0);
+  const starterTotal = active.slots.filter((sl) => starterIds.has(sl.id)).reduce((s, sl) => s + slotAmount(sl), 0);
   const benchTotal = total - starterTotal;
   const posTotals: Record<string, number> = { QB: 0, RB: 0, WR: 0, TE: 0, DEF: 0 };
   active.slots.forEach((sl) => {
-    posTotals[sl.pos] = (posTotals[sl.pos] || 0) + (Number(sl.amount) || 0);
+    posTotals[sl.pos] = (posTotals[sl.pos] || 0) + slotAmount(sl);
   });
 
   // Excludes drafted/kept/disliked players so the list always shows live, real
@@ -146,7 +205,68 @@ export function StrategyTab({
           </div>
         )}
 
-        <div style={{ fontSize: 11, color: "#8B92A0", marginBottom: 10 }}>
+        <div style={styles.panelTitle}>My keepers</div>
+        <div style={{ fontSize: 11, color: "#8B92A0", marginBottom: 8 }}>
+          Add the players you&apos;re keeping and their cost. Each one fills the earliest slot at its position below —
+          hiding that slot&apos;s targets and counting its cost toward your budget.
+        </div>
+        {myKeepers.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 8 }}>
+            {myKeepers.map((k) => (
+              <div key={k.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ ...styles.posTagSm, background: POS_COLOR[k.pos] }}>{k.pos}</span>
+                <span style={{ flex: 1, fontSize: 12.5 }}>{k.name}</span>
+                <span style={{ fontSize: 11, color: "#8B92A0" }}>$</span>
+                <input
+                  style={{ ...styles.cellInput, width: 50 }}
+                  type="number"
+                  placeholder="cost"
+                  value={k.keeperCost}
+                  onChange={(e) => onKeeperCost(k, e.target.value)}
+                />
+                <button style={styles.removeBtn} title="Remove keeper" onClick={() => onStatus(k, "")}>
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        <div style={styles.row}>
+          <input
+            list="keeper-players"
+            style={{ ...styles.input, flex: 1 }}
+            placeholder="Player name"
+            value={keeperName}
+            onChange={(e) => {
+              setKeeperName(e.target.value);
+              setKeeperError(null);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") addKeeper();
+            }}
+          />
+          <datalist id="keeper-players">
+            {eligibleKeepers.map((r) => (
+              <option key={r.id} value={r.name} />
+            ))}
+          </datalist>
+          <input
+            style={{ ...styles.input, width: 64 }}
+            type="number"
+            placeholder="$"
+            value={keeperCostInput}
+            onChange={(e) => setKeeperCostInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") addKeeper();
+            }}
+          />
+          <button style={styles.primaryBtn} onClick={addKeeper}>
+            Add
+          </button>
+        </div>
+        {keeperError && <div style={{ fontSize: 11, color: "#E1524B", marginTop: 6 }}>{keeperError}</div>}
+
+        <div style={{ fontSize: 11, color: "#8B92A0", margin: "14px 0 10px" }}>
           Click a target to mark Like, double-click for Love, press and hold to Dislike (swaps in the next closest
           player).
         </div>
@@ -165,14 +285,15 @@ export function StrategyTab({
               {active.slots.map((sl) => {
                 const fixed = !!FIXED_SLOT_POS[sl.id];
                 const options: Pos[] = sl.id.startsWith("flex") ? (["RB", "WR", "TE"] as Pos[]) : POSITIONS;
-                const comps = closestPlayers(sl.pos, sl.amount);
+                const keeper = slotKeeper.get(sl.id);
+                const comps = keeper ? [] : closestPlayers(sl.pos, sl.amount);
                 return (
-                  <tr key={sl.id}>
+                  <tr key={sl.id} style={keeper ? { background: "rgba(76, 175, 107, 0.10)" } : undefined}>
                     <td style={styles.td}>
                       <span style={{ fontSize: 12 }}>{slotLabel(sl.id)}</span>
                     </td>
                     <td style={styles.td}>
-                      {fixed ? (
+                      {fixed || keeper ? (
                         <span style={{ ...styles.posTagSm, background: POS_COLOR[sl.pos] }}>{sl.pos}</span>
                       ) : (
                         <select
@@ -189,20 +310,30 @@ export function StrategyTab({
                       )}
                     </td>
                     <td style={styles.td}>
-                      <input
-                        style={styles.cellInput}
-                        type="number"
-                        value={sl.amount}
-                        onChange={(e) => onSlotAmount(active.id, sl.id, e.target.value)}
-                      />
+                      {keeper ? (
+                        <span style={{ ...styles.tdMono, color: "#8FCB9E" }} title="Keeper cost">
+                          ${Number(keeper.keeperCost) || 0}
+                        </span>
+                      ) : (
+                        <input
+                          style={styles.cellInput}
+                          type="number"
+                          value={sl.amount}
+                          onChange={(e) => onSlotAmount(active.id, sl.id, e.target.value)}
+                        />
+                      )}
                     </td>
                     <td style={{ ...styles.td, textAlign: "left", verticalAlign: "top" }}>
-                      <div style={{ display: "flex", flexDirection: "column" }}>
-                        {comps.map((c) => (
-                          <CompPlayerItem key={c.id} row={c} onRate={onRate} />
-                        ))}
-                        {comps.length === 0 && <span style={{ fontSize: 11, color: "#4A5160" }}>—</span>}
-                      </div>
+                      {keeper ? (
+                        <span style={{ fontSize: 11, color: "#4CAF6B" }}>🔒 Keeper: {keeper.name}</span>
+                      ) : (
+                        <div style={{ display: "flex", flexDirection: "column" }}>
+                          {comps.map((c) => (
+                            <CompPlayerItem key={c.id} row={c} onRate={onRate} />
+                          ))}
+                          {comps.length === 0 && <span style={{ fontSize: 11, color: "#4A5160" }}>—</span>}
+                        </div>
+                      )}
                     </td>
                   </tr>
                 );
