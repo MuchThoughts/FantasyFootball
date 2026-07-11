@@ -622,7 +622,7 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
           Insights
         </button>
         <button style={tab === "offenses" ? styles.tabActive : styles.tab} onClick={() => setTab("offenses")}>
-          Offenses
+          Team Stats
         </button>
       </div>
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { OffenseTeam } from "@/lib/data/offense";
+import { OLINE_RANKINGS, OLINE_RANKINGS_SOURCE, OLINE_RANKINGS_URL } from "@/lib/data/lineRankings";
 import { styles } from "./styles";
 
 type OffenseRow = OffenseTeam & { team: string; diff25: number | null; diff24: number | null };
@@ -9,6 +10,73 @@ interface OffensesTabProps {
   rows: OffenseRow[];
   sort: string;
   setSort: (key: string) => void;
+}
+
+// A 1-to-N ranked list of team names, rendered as a two-column grid with a
+// rank badge on each row. Used for the offensive line ranking below the table.
+function RankedList({
+  title,
+  teams,
+  source,
+  sourceUrl,
+}: {
+  title: string;
+  teams: string[];
+  source: string;
+  sourceUrl: string;
+}) {
+  return (
+    <div style={{ marginTop: 20 }}>
+      <div style={styles.panelTitle}>{title}</div>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))",
+          gap: 4,
+        }}
+      >
+        {teams.map((team, i) => {
+          const rank = i + 1;
+          // Green at the top, red at the bottom, muted through the middle.
+          const color = rank <= 8 ? "#4CAF6B" : rank <= 16 ? "#8FCB9E" : rank <= 24 ? "#8B92A0" : "#E1524B";
+          return (
+            <div
+              key={team}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "5px 8px",
+                background: "#14171C",
+                border: "1px solid #2A2F38",
+                borderRadius: 6,
+              }}
+            >
+              <span
+                style={{
+                  ...styles.tdMono,
+                  fontSize: 11,
+                  color,
+                  minWidth: 20,
+                  textAlign: "right",
+                  fontWeight: 700,
+                }}
+              >
+                {rank}
+              </span>
+              <span style={{ fontSize: 12.5, fontWeight: 500 }}>{team}</span>
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ ...styles.emptyState, marginTop: 8 }}>
+        Source:{" "}
+        <a href={sourceUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#5B9BD5" }}>
+          {source}
+        </a>
+      </div>
+    </div>
+  );
 }
 
 export function OffensesTab({ rows, sort, setSort }: OffensesTabProps) {
@@ -67,6 +135,13 @@ export function OffensesTab({ rows, sort, setSort }: OffensesTabProps) {
         defense. Diff = PPG minus Allowed (positive means the team outscores what it gives up). Tap a column header
         to sort. Dashes mean that figure wasn&apos;t available for that team/season.
       </div>
+
+      <RankedList
+        title="Offensive Line Rankings — 2026"
+        teams={OLINE_RANKINGS}
+        source={OLINE_RANKINGS_SOURCE}
+        sourceUrl={OLINE_RANKINGS_URL}
+      />
     </div>
   );
 }
