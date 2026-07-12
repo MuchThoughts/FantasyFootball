@@ -55,9 +55,26 @@ export function BoardRow({
   // Drop-target edge wins over a tier break line while a drag is in flight.
   const tBreakStyle = { ...(tierBreak ? { borderTop: `2px solid ${tierColor(row.tier)}` } : {}), ...dropEdge };
   const targetGlow = isTarget && !dimmed ? { boxShadow: "inset 3px 0 0 #4CAF6B" } : {};
-  const rowTint =
-    row.interest === "love" ? "rgba(76, 175, 107, 0.38)" : row.interest === "like" ? "rgba(76, 175, 107, 0.14)" : null;
+  // Pale orange = a league-mate will likely keep this player, so plan as if
+  // they won't be in the pool. The warning outranks the like/love tint.
+  const likelyKeeper = !row.isKeeper && !row.isDrafted ? row.likelyKeeper : null;
+  const rowTint = likelyKeeper
+    ? "rgba(232, 163, 61, 0.16)"
+    : row.interest === "love"
+    ? "rgba(76, 175, 107, 0.38)"
+    : row.interest === "like"
+    ? "rgba(76, 175, 107, 0.14)"
+    : null;
   const bgStyle = rowTint ? { background: rowTint } : {};
+  const keeperTag = likelyKeeper && (
+    <span
+      style={{ color: "#E8A33D" }}
+      title={`Likely 2026 keeper for ${likelyKeeper.owner} ($${likelyKeeper.cost}) — probably not in the pool`}
+    >
+      {" · K: "}
+      {likelyKeeper.owner === "Sean" ? "you" : likelyKeeper.owner} ${likelyKeeper.cost}
+    </span>
+  );
 
   let liveAlertColor: string | null = null;
   let liveAlertLabel = "";
@@ -106,6 +123,7 @@ export function BoardRow({
             <div style={styles.tdPlayerName}>{row.name}</div>
             <div style={styles.tdPlayerMeta}>
               {row.team ? row.team + " · " : ""}ADP {row.adp}
+              {keeperTag}
             </div>
           </div>
         ) : (
@@ -113,6 +131,7 @@ export function BoardRow({
             <div style={styles.tdPlayerName}>{row.name}</div>
             <div style={styles.tdPlayerMeta}>
               {row.team ? row.team + " · " : ""}ADP {row.adp}
+              {keeperTag}
             </div>
           </>
         )}

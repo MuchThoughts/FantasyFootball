@@ -1,3 +1,4 @@
+import { OWNER_INSIGHTS } from "./data/drafters";
 import { Player } from "./data/players";
 import { PRICE_CURVE } from "./data/priceCurve";
 import { Strategy } from "./data/strategies";
@@ -36,6 +37,21 @@ export function slotLabel(id: string): string {
 
 export function uid(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+// Players a league-mate will most likely keep (the likely-flagged options in the
+// Insights data), keyed by player uid. Ineligible players (already kept twice)
+// are never flagged likely there, so they correctly stay in the pool. Used to
+// tint rows pale orange as a "probably won't be available at auction" warning.
+export interface LikelyKeeper {
+  owner: string;
+  cost: number;
+}
+export const LIKELY_KEEPERS: Record<string, LikelyKeeper> = {};
+for (const o of OWNER_INSIGHTS) {
+  for (const k of o.keeperOptions) {
+    if (k.likely) LIKELY_KEEPERS[uid(k.player)] = { owner: o.owner, cost: k.cost };
+  }
 }
 
 export function fmtMoney(n: number): string {
@@ -143,6 +159,9 @@ export interface BoardRow {
   live: number | null;
   max: number | "";
   interest: Interest;
+  // Set when a league-mate is likely to keep this player (see LIKELY_KEEPERS);
+  // null once the player is actually kept or drafted.
+  likelyKeeper: LikelyKeeper | null;
 }
 
 export interface Board {
@@ -289,6 +308,7 @@ export function computeBoard(
         live: null,
         max: meta.max ?? "",
         interest: activeInterest[r.id] ?? "neutral",
+        likelyKeeper: null,
       };
     }
     const d = drafted[r.id];
@@ -304,6 +324,7 @@ export function computeBoard(
       live,
       max: meta.max ?? "",
       interest: activeInterest[r.id] ?? "neutral",
+      likelyKeeper: isDrafted ? null : LIKELY_KEEPERS[r.id] ?? null,
     };
   });
 
