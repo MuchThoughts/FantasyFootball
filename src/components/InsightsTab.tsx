@@ -9,7 +9,9 @@ export function InsightsTab() {
     <div>
       <div style={styles.emptyState}>
         Built from your league&apos;s 2023–2025 auction results and the official keeper sheet. Keeper costs shown
-        are 2026 prices (last salary + $5, undrafted = $10); a player can only be kept two years running.
+        are 2026 prices (last salary + $5, undrafted = $10); a player can only be kept two years running. Keeper
+        values are judged against current 2026 rankings — &ldquo;market&rdquo; is your league&apos;s 3-yr price at
+        the player&apos;s 2026 positional rank, so trades, injuries, and role changes are priced in.
       </div>
       <LeagueBaseline />
       <div style={styles.list}>
