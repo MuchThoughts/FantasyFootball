@@ -22,23 +22,26 @@ function slots(specs: SlotSpec[]): StrategySlot[] {
 }
 
 /*
- * Data-optimized presets for this league (12 teams, $200, 2 starting QBs).
+ * Data-tuned presets for this league (12 teams, $200, 2 starting QBs).
  *
- * Slot prices come from a knapsack optimizer that crossed the league's own
- * 3-year price curve (priceCurve.ts — what the room actually pays for the Nth
- * player at each position) with 2025 season fantasy points by positional
- * finish rank, discounted for draft-rank uncertainty. Key findings:
+ * Prices were derived in two passes: a knapsack optimizer over the league's
+ * 3-year price curve × 2025 finish points, then corrected against what the
+ * players ACTUALLY DRAFTED in each price band went on to score (auction rank
+ * is not finish rank — you don't get to buy the future QB8 by paying the QB8
+ * price). What survives both passes:
  *
- *  - Mid QBs are the best-priced asset: QB7–11 cost $22–29 here and scored
- *    296–316 — every dollar returns ~6–7 pts vs ~4 for a $62 elite.
- *  - Elite RBs are a real tier (top 4 scored 328–366; RB5+ falls off fast),
- *    and mid RBs ($18–22 for RB10–15, 212–236 pts) are underpriced volume.
- *  - $40+ WRs are the league's worst buy (~3 pts/$); WR8–24 all scored within
- *    40 pts of each other, so $9–23 WRs lose almost nothing.
- *  - TE past #1 is flat (TE2–13 scored 121–167): pay $1–6 unless chasing the
- *    McBride-sized gap. DEF: $2 for the consensus top unit, never more.
- *  - Bench dollars buy zero starting-lineup points: every preset now spends
- *    $190 on starters and $10 on bench ($5 of it on the mandatory QB3).
+ *  - Mid QBs are the league's best asset: the actual $22–29 QB buys returned
+ *    the same points as the $51+ elite cohort at half the price.
+ *  - One elite RB is worth it: actual RB1–4 buys averaged ~286 pts. But the
+ *    $19–22 RB band busted hard (~138 avg) while $8–18 RBs returned ~174 —
+ *    buy ONE stud plus $12–18 volume, never a stack of $20 backs.
+ *  - $40+ WRs are the biggest overpay (~178 pts for ~$47). The value band is
+ *    $11–23 (~167 pts for ~$15). $9–10 WRs were a dead zone (~77 pts) — don't
+ *    punt a starting WR slot below ~$11.
+ *  - TE past the top guy is flat: pay $1–6 unless buying a true TE1 candidate.
+ *    DEF is $1–2, always.
+ *  - Starters get ~$186 of the $200; the $14 bench buys a usable ~$6 QB3
+ *    (bye-week coverage is mandatory with 2 QB slots) and a ~$3 RB stash.
  *
  * Every preset sums to exactly $200.
  */
@@ -64,137 +67,137 @@ export const DEFAULT_STRATEGIES: Strategy[] = [
     id: "preset-optimal",
     name: "Max Points",
     description:
-      "The unconstrained optimum from 2025 results × this league's price curve: two QBs from the underpriced " +
-      "$24–29 pocket (QB7–11 scored 296–316), a ~$49 elite RB plus three $19–22 RBs filling both flexes, " +
-      "punt WRs at $9–10 (WR8–24 scored within 40 pts of each other), $2 TE and DEF. Projects ~2,210 starter " +
-      "pts — roughly 280 more than the league-average allocation.",
+      "The reconciled best build: two mid-tier QBs at $24–29 (the league's actual buys in that pocket matched " +
+      "the $51+ elites at half the price), one ~$50 elite RB with $12–18 volume behind him (the $19–22 RB band " +
+      "busted; $8–18 returned more), and three WRs from the $13–20 value band — never $9–10, which was a dead " +
+      "zone. $2 TE, $1 DEF, and a $14 bench anchored by a $6 QB3.",
     slots: slots([
-      ["qb1", "QB", 29], ["qb2", "QB", 27],
-      ["rb1", "RB", 49], ["rb2", "RB", 22],
-      ["wr1", "WR", 10], ["wr2", "WR", 9],
-      ["te", "TE", 2], ["def", "DEF", 2],
-      ["flex1", "RB", 21], ["flex2", "RB", 19],
-      ["bench1", "QB", 5], ["bench2", "RB", 1], ["bench3", "RB", 1],
-      ["bench4", "WR", 1], ["bench5", "WR", 1], ["bench6", "TE", 1],
+      ["qb1", "QB", 29], ["qb2", "QB", 24],
+      ["rb1", "RB", 50], ["rb2", "RB", 18],
+      ["wr1", "WR", 20], ["wr2", "WR", 17],
+      ["te", "TE", 2], ["def", "DEF", 1],
+      ["flex1", "RB", 12], ["flex2", "WR", 13],
+      ["bench1", "QB", 6], ["bench2", "RB", 3], ["bench3", "RB", 1],
+      ["bench4", "WR", 2], ["bench5", "WR", 1], ["bench6", "TE", 1],
     ]),
   },
   {
     id: "preset-heroqb",
     name: "Hero QB",
     description:
-      "One true elite QB at ~$54 (QB1–4 scored 350–375) with a $13 QB2 from the QB14–17 tier, then the " +
-      "optimizer's core: ~$49 stud RB plus three mid RBs. WRs are punted — $40+ WRs return only ~3 pts/$ " +
-      "here, the worst star buy on the board. ~2,145 projected starter pts.",
+      "One true elite QB at ~$54 with a $13 QB2 — you're paying for the healthy-elite ceiling (350–375 pts) " +
+      "and wearing the injury risk that made the league's actual elite-QB buys break even with the mid tier. " +
+      "The rest follows the data: ~$49 stud RB, $12–14 RB volume, and WRs from the $13–16 value band.",
     slots: slots([
       ["qb1", "QB", 54], ["qb2", "QB", 13],
-      ["rb1", "RB", 49], ["rb2", "RB", 22],
-      ["wr1", "WR", 6], ["wr2", "WR", 5],
-      ["te", "TE", 2], ["def", "DEF", 2],
-      ["flex1", "RB", 19], ["flex2", "RB", 18],
-      ["bench1", "QB", 5], ["bench2", "RB", 1], ["bench3", "RB", 1],
-      ["bench4", "WR", 1], ["bench5", "WR", 1], ["bench6", "TE", 1],
+      ["rb1", "RB", 49], ["rb2", "RB", 14],
+      ["wr1", "WR", 16], ["wr2", "WR", 13],
+      ["te", "TE", 2], ["def", "DEF", 1],
+      ["flex1", "RB", 12], ["flex2", "RB", 12],
+      ["bench1", "QB", 6], ["bench2", "RB", 3], ["bench3", "RB", 1],
+      ["bench4", "WR", 2], ["bench5", "WR", 1], ["bench6", "TE", 1],
     ]),
   },
   {
     id: "preset-dualqb",
     name: "Dual Elite QB",
     description:
-      "Two elites — but pay for the BOTTOM of the elite tier: QB5–6 go $35–43 here and scored within 25 pts " +
-      "of the $62 guys. The backbone stays RB-heavy ($45 stud + $12–22 volume) and WR/TE are punted. " +
-      "~2,160 projected starter pts.",
+      "Two elites, but pay for the BOTTOM of the elite tier (QB5–6 go $35–43 here, within 25 pts of the $62 " +
+      "guys when healthy). Highest concentration risk of any build — the league's one $91 dual-QB team was " +
+      "wrecked by two injuries. Elsewhere: $45 stud RB, $9–13 RB volume, value-band WRs.",
     slots: slots([
       ["qb1", "QB", 43], ["qb2", "QB", 35],
-      ["rb1", "RB", 45], ["rb2", "RB", 22],
-      ["wr1", "WR", 5], ["wr2", "WR", 5],
-      ["te", "TE", 2], ["def", "DEF", 2],
-      ["flex1", "RB", 19], ["flex2", "RB", 12],
-      ["bench1", "QB", 5], ["bench2", "RB", 1], ["bench3", "RB", 1],
-      ["bench4", "WR", 1], ["bench5", "WR", 1], ["bench6", "TE", 1],
+      ["rb1", "RB", 45], ["rb2", "RB", 13],
+      ["wr1", "WR", 14], ["wr2", "WR", 12],
+      ["te", "TE", 2], ["def", "DEF", 1],
+      ["flex1", "RB", 12], ["flex2", "RB", 9],
+      ["bench1", "QB", 6], ["bench2", "RB", 3], ["bench3", "RB", 1],
+      ["bench4", "WR", 2], ["bench5", "WR", 1], ["bench6", "TE", 1],
     ]),
   },
   {
     id: "preset-valueqb",
     name: "Value QBs (Spread)",
     description:
-      "Nothing over $30: two QBs at $27–29 (the QB7–9 pocket), four RBs at $19–29, and the only build that " +
-      "buys a real WR2 ($23 + $12) and a mid TE ($6). Lowest variance in the room — no single bust sinks it. " +
-      "~2,180 projected starter pts.",
+      "Nothing over $30: two QBs from the $27–29 pocket, RBs at $18–29 (skipping the busted $20–22 stack), " +
+      "and three WRs from the $16–23 value band. Lowest variance in the room — no single bust sinks it — at " +
+      "the cost of owning no elite-RB ceiling.",
     slots: slots([
       ["qb1", "QB", 29], ["qb2", "QB", 27],
-      ["rb1", "RB", 29], ["rb2", "RB", 22],
-      ["wr1", "WR", 23], ["wr2", "WR", 12],
-      ["te", "TE", 6], ["def", "DEF", 2],
-      ["flex1", "RB", 21], ["flex2", "RB", 19],
-      ["bench1", "QB", 5], ["bench2", "RB", 1], ["bench3", "RB", 1],
-      ["bench4", "WR", 1], ["bench5", "WR", 1], ["bench6", "TE", 1],
+      ["rb1", "RB", 29], ["rb2", "RB", 18],
+      ["wr1", "WR", 23], ["wr2", "WR", 16],
+      ["te", "TE", 6], ["def", "DEF", 1],
+      ["flex1", "RB", 18], ["flex2", "WR", 19],
+      ["bench1", "QB", 6], ["bench2", "RB", 3], ["bench3", "RB", 1],
+      ["bench4", "WR", 2], ["bench5", "WR", 1], ["bench6", "TE", 1],
     ]),
   },
   {
     id: "preset-stars",
     name: "Stars & Scrubs",
     description:
-      "Three studs — $54 QB, $49 RB, $52 WR — then nothing over $8. The data likes stars at QB and RB but " +
-      "shows WR studs return only ~3.5 pts/$, so this is ceiling-chasing, not value (~2,065 projected pts). " +
-      "Best deployed when the room is letting elite players go under their historical prices.",
+      "Three studs — $54 QB, $49 RB, $52 WR — then nothing over $8. Pure ceiling play: the elite-WR leg is " +
+      "the weakest by this league's realized returns, and no team that put 60%+ of budget into three players " +
+      "finished top-5 last year. Use only when the room is letting elites go under their historical prices.",
     slots: slots([
       ["qb1", "QB", 54], ["qb2", "QB", 8],
       ["rb1", "RB", 49], ["rb2", "RB", 8],
       ["wr1", "WR", 52], ["wr2", "WR", 5],
-      ["te", "TE", 3], ["def", "DEF", 2],
-      ["flex1", "RB", 7], ["flex2", "TE", 2],
-      ["bench1", "QB", 5], ["bench2", "RB", 1], ["bench3", "RB", 1],
-      ["bench4", "WR", 1], ["bench5", "WR", 1], ["bench6", "TE", 1],
+      ["te", "TE", 3], ["def", "DEF", 1],
+      ["flex1", "RB", 4], ["flex2", "TE", 2],
+      ["bench1", "QB", 6], ["bench2", "RB", 3], ["bench3", "RB", 1],
+      ["bench4", "WR", 2], ["bench5", "WR", 1], ["bench6", "TE", 1],
     ]),
   },
   {
     id: "preset-zerorb",
     name: "Zero RB",
     description:
-      "If you punt RB ($5–7 starters), the money must go to the two alpha WRs ($52–59) — mid-priced WRs are " +
-      "this league's worst asset, so don't spread it. Cheap TEs fill both flexes ($2–4 TEs scored 141–152, " +
-      "basically free). ~2,060 projected pts: the data's least favorite build, kept as the RB-dead-zone hedge.",
+      "Punt RB ($5–7 starters) and pour the savings into WRs. The catch in this league: expensive WRs are the " +
+      "worst-priced asset, so even executed well this build fights the market — it's the hedge for when the " +
+      "room's RB bidding gets irrational, not a default. Mid QBs, cheap TEs in the flex.",
     slots: slots([
       ["qb1", "QB", 29], ["qb2", "QB", 27],
       ["rb1", "RB", 7], ["rb2", "RB", 5],
-      ["wr1", "WR", 59], ["wr2", "WR", 52],
-      ["te", "TE", 4], ["def", "DEF", 2],
-      ["flex1", "TE", 3], ["flex2", "TE", 2],
-      ["bench1", "QB", 5], ["bench2", "RB", 1], ["bench3", "RB", 1],
-      ["bench4", "WR", 1], ["bench5", "WR", 1], ["bench6", "TE", 1],
+      ["wr1", "WR", 52], ["wr2", "WR", 43],
+      ["te", "TE", 4], ["def", "DEF", 1],
+      ["flex1", "WR", 13], ["flex2", "TE", 5],
+      ["bench1", "QB", 6], ["bench2", "RB", 3], ["bench3", "RB", 1],
+      ["bench4", "WR", 2], ["bench5", "WR", 1], ["bench6", "TE", 1],
     ]),
   },
   {
     id: "preset-herorb",
     name: "Hero RB",
     description:
-      "A ~$49 elite RB (the top 4 scored 328–366, a full tier above RB5+) with $12–13 volume behind him, two " +
-      "$27–29 QBs from the value pocket, and real WRs at $21–23. Second-highest projection of any named build " +
-      "(~2,165 pts) and the most balanced roster the data endorses.",
+      "Pay up to the RB1–2 tier (~$59) for a true bell-cow — actual elite-RB buys averaged ~286 pts, the most " +
+      "reliable expensive purchase in the league — with $12 RB volume behind him, two $25–27 QBs from the " +
+      "value pocket, and $16–20 WRs. The closest sibling to Max Points, trading WR3 money for more RB1.",
     slots: slots([
-      ["qb1", "QB", 29], ["qb2", "QB", 27],
-      ["rb1", "RB", 49], ["rb2", "RB", 13],
-      ["wr1", "WR", 23], ["wr2", "WR", 21],
-      ["te", "TE", 2], ["def", "DEF", 2],
+      ["qb1", "QB", 27], ["qb2", "QB", 25],
+      ["rb1", "RB", 59], ["rb2", "RB", 12],
+      ["wr1", "WR", 20], ["wr2", "WR", 16],
+      ["te", "TE", 2], ["def", "DEF", 1],
       ["flex1", "RB", 12], ["flex2", "RB", 12],
-      ["bench1", "QB", 5], ["bench2", "RB", 1], ["bench3", "RB", 1],
-      ["bench4", "WR", 1], ["bench5", "WR", 1], ["bench6", "TE", 1],
+      ["bench1", "QB", 6], ["bench2", "RB", 3], ["bench3", "RB", 1],
+      ["bench4", "WR", 2], ["bench5", "WR", 1], ["bench6", "TE", 1],
     ]),
   },
   {
     id: "preset-elitete",
     name: "Elite TE",
     description:
-      "Pay the $19 TE2 market price for a shot at the McBride-sized gap (TE1 outscored TE2 by 86 pts in 2025 " +
-      "— but you're buying the chance, not the certainty). The rest is the optimizer core: $45 RB + volume, " +
-      "$25–27 QBs, punted WRs. ~2,190 projected pts — sneaky-strong if the elite TE falls near $20.",
+      "Pay the ~$19 TE2 market price only for a true TE1-overall candidate (the 2025 TE1 outscored TE2 by 86 " +
+      "pts — you're buying that chance). Rest of the build: $45 RB + $13–15 volume, $25–27 QBs, value-band " +
+      "WRs. If the elite TE goes past ~$22, bail to a $2 TE and slide the money to RB.",
     slots: slots([
       ["qb1", "QB", 27], ["qb2", "QB", 25],
-      ["rb1", "RB", 45], ["rb2", "RB", 22],
-      ["wr1", "WR", 5], ["wr2", "WR", 5],
-      ["te", "TE", 19], ["def", "DEF", 2],
-      ["flex1", "RB", 21], ["flex2", "RB", 19],
-      ["bench1", "QB", 5], ["bench2", "RB", 1], ["bench3", "RB", 1],
-      ["bench4", "WR", 1], ["bench5", "WR", 1], ["bench6", "TE", 1],
+      ["rb1", "RB", 45], ["rb2", "RB", 15],
+      ["wr1", "WR", 16], ["wr2", "WR", 13],
+      ["te", "TE", 19], ["def", "DEF", 1],
+      ["flex1", "RB", 13], ["flex2", "RB", 12],
+      ["bench1", "QB", 6], ["bench2", "RB", 3], ["bench3", "RB", 1],
+      ["bench4", "WR", 2], ["bench5", "WR", 1], ["bench6", "TE", 1],
     ]),
   },
 ];
@@ -391,6 +394,145 @@ export const LEGACY_STRATEGIES: Strategy[] = [
       ["flex1", "RB", 9], ["flex2", "WR", 9],
       ["bench1", "QB", 6], ["bench2", "RB", 6], ["bench3", "RB", 4],
       ["bench4", "WR", 5], ["bench5", "WR", 3], ["bench6", "TE", 1],
+    ]),
+  },
+  // --- generation 3: first data-optimized pass (finish-curve model, pre correction
+  // for auction-rank vs finish-rank) ---
+  {
+    id: "preset-optimal",
+    name: "Max Points",
+    description:
+      "The unconstrained optimum from 2025 results × this league's price curve: two QBs from the underpriced " +
+      "$24–29 pocket (QB7–11 scored 296–316), a ~$49 elite RB plus three $19–22 RBs filling both flexes, " +
+      "punt WRs at $9–10 (WR8–24 scored within 40 pts of each other), $2 TE and DEF. Projects ~2,210 starter " +
+      "pts — roughly 280 more than the league-average allocation.",
+    slots: slots([
+      ["qb1", "QB", 29], ["qb2", "QB", 27],
+      ["rb1", "RB", 49], ["rb2", "RB", 22],
+      ["wr1", "WR", 10], ["wr2", "WR", 9],
+      ["te", "TE", 2], ["def", "DEF", 2],
+      ["flex1", "RB", 21], ["flex2", "RB", 19],
+      ["bench1", "QB", 5], ["bench2", "RB", 1], ["bench3", "RB", 1],
+      ["bench4", "WR", 1], ["bench5", "WR", 1], ["bench6", "TE", 1],
+    ]),
+  },
+  {
+    id: "preset-heroqb",
+    name: "Hero QB",
+    description:
+      "One true elite QB at ~$54 (QB1–4 scored 350–375) with a $13 QB2 from the QB14–17 tier, then the " +
+      "optimizer's core: ~$49 stud RB plus three mid RBs. WRs are punted — $40+ WRs return only ~3 pts/$ " +
+      "here, the worst star buy on the board. ~2,145 projected starter pts.",
+    slots: slots([
+      ["qb1", "QB", 54], ["qb2", "QB", 13],
+      ["rb1", "RB", 49], ["rb2", "RB", 22],
+      ["wr1", "WR", 6], ["wr2", "WR", 5],
+      ["te", "TE", 2], ["def", "DEF", 2],
+      ["flex1", "RB", 19], ["flex2", "RB", 18],
+      ["bench1", "QB", 5], ["bench2", "RB", 1], ["bench3", "RB", 1],
+      ["bench4", "WR", 1], ["bench5", "WR", 1], ["bench6", "TE", 1],
+    ]),
+  },
+  {
+    id: "preset-dualqb",
+    name: "Dual Elite QB",
+    description:
+      "Two elites — but pay for the BOTTOM of the elite tier: QB5–6 go $35–43 here and scored within 25 pts " +
+      "of the $62 guys. The backbone stays RB-heavy ($45 stud + $12–22 volume) and WR/TE are punted. " +
+      "~2,160 projected starter pts.",
+    slots: slots([
+      ["qb1", "QB", 43], ["qb2", "QB", 35],
+      ["rb1", "RB", 45], ["rb2", "RB", 22],
+      ["wr1", "WR", 5], ["wr2", "WR", 5],
+      ["te", "TE", 2], ["def", "DEF", 2],
+      ["flex1", "RB", 19], ["flex2", "RB", 12],
+      ["bench1", "QB", 5], ["bench2", "RB", 1], ["bench3", "RB", 1],
+      ["bench4", "WR", 1], ["bench5", "WR", 1], ["bench6", "TE", 1],
+    ]),
+  },
+  {
+    id: "preset-valueqb",
+    name: "Value QBs (Spread)",
+    description:
+      "Nothing over $30: two QBs at $27–29 (the QB7–9 pocket), four RBs at $19–29, and the only build that " +
+      "buys a real WR2 ($23 + $12) and a mid TE ($6). Lowest variance in the room — no single bust sinks it. " +
+      "~2,180 projected starter pts.",
+    slots: slots([
+      ["qb1", "QB", 29], ["qb2", "QB", 27],
+      ["rb1", "RB", 29], ["rb2", "RB", 22],
+      ["wr1", "WR", 23], ["wr2", "WR", 12],
+      ["te", "TE", 6], ["def", "DEF", 2],
+      ["flex1", "RB", 21], ["flex2", "RB", 19],
+      ["bench1", "QB", 5], ["bench2", "RB", 1], ["bench3", "RB", 1],
+      ["bench4", "WR", 1], ["bench5", "WR", 1], ["bench6", "TE", 1],
+    ]),
+  },
+  {
+    id: "preset-stars",
+    name: "Stars & Scrubs",
+    description:
+      "Three studs — $54 QB, $49 RB, $52 WR — then nothing over $8. The data likes stars at QB and RB but " +
+      "shows WR studs return only ~3.5 pts/$, so this is ceiling-chasing, not value (~2,065 projected pts). " +
+      "Best deployed when the room is letting elite players go under their historical prices.",
+    slots: slots([
+      ["qb1", "QB", 54], ["qb2", "QB", 8],
+      ["rb1", "RB", 49], ["rb2", "RB", 8],
+      ["wr1", "WR", 52], ["wr2", "WR", 5],
+      ["te", "TE", 3], ["def", "DEF", 2],
+      ["flex1", "RB", 7], ["flex2", "TE", 2],
+      ["bench1", "QB", 5], ["bench2", "RB", 1], ["bench3", "RB", 1],
+      ["bench4", "WR", 1], ["bench5", "WR", 1], ["bench6", "TE", 1],
+    ]),
+  },
+  {
+    id: "preset-zerorb",
+    name: "Zero RB",
+    description:
+      "If you punt RB ($5–7 starters), the money must go to the two alpha WRs ($52–59) — mid-priced WRs are " +
+      "this league's worst asset, so don't spread it. Cheap TEs fill both flexes ($2–4 TEs scored 141–152, " +
+      "basically free). ~2,060 projected pts: the data's least favorite build, kept as the RB-dead-zone hedge.",
+    slots: slots([
+      ["qb1", "QB", 29], ["qb2", "QB", 27],
+      ["rb1", "RB", 7], ["rb2", "RB", 5],
+      ["wr1", "WR", 59], ["wr2", "WR", 52],
+      ["te", "TE", 4], ["def", "DEF", 2],
+      ["flex1", "TE", 3], ["flex2", "TE", 2],
+      ["bench1", "QB", 5], ["bench2", "RB", 1], ["bench3", "RB", 1],
+      ["bench4", "WR", 1], ["bench5", "WR", 1], ["bench6", "TE", 1],
+    ]),
+  },
+  {
+    id: "preset-herorb",
+    name: "Hero RB",
+    description:
+      "A ~$49 elite RB (the top 4 scored 328–366, a full tier above RB5+) with $12–13 volume behind him, two " +
+      "$27–29 QBs from the value pocket, and real WRs at $21–23. Second-highest projection of any named build " +
+      "(~2,165 pts) and the most balanced roster the data endorses.",
+    slots: slots([
+      ["qb1", "QB", 29], ["qb2", "QB", 27],
+      ["rb1", "RB", 49], ["rb2", "RB", 13],
+      ["wr1", "WR", 23], ["wr2", "WR", 21],
+      ["te", "TE", 2], ["def", "DEF", 2],
+      ["flex1", "RB", 12], ["flex2", "RB", 12],
+      ["bench1", "QB", 5], ["bench2", "RB", 1], ["bench3", "RB", 1],
+      ["bench4", "WR", 1], ["bench5", "WR", 1], ["bench6", "TE", 1],
+    ]),
+  },
+  {
+    id: "preset-elitete",
+    name: "Elite TE",
+    description:
+      "Pay the $19 TE2 market price for a shot at the McBride-sized gap (TE1 outscored TE2 by 86 pts in 2025 " +
+      "— but you're buying the chance, not the certainty). The rest is the optimizer core: $45 RB + volume, " +
+      "$25–27 QBs, punted WRs. ~2,190 projected pts — sneaky-strong if the elite TE falls near $20.",
+    slots: slots([
+      ["qb1", "QB", 27], ["qb2", "QB", 25],
+      ["rb1", "RB", 45], ["rb2", "RB", 22],
+      ["wr1", "WR", 5], ["wr2", "WR", 5],
+      ["te", "TE", 19], ["def", "DEF", 2],
+      ["flex1", "RB", 21], ["flex2", "RB", 19],
+      ["bench1", "QB", 5], ["bench2", "RB", 1], ["bench3", "RB", 1],
+      ["bench4", "WR", 1], ["bench5", "WR", 1], ["bench6", "TE", 1],
     ]),
   },
 ];
