@@ -32,6 +32,7 @@ import { TierDivider } from "./TierDivider";
 import { StrategyTab } from "./StrategyTab";
 import { RankingsTab } from "./RankingsTab";
 import { MarketReadPanel } from "./MarketReadPanel";
+import { StrategyAdvisor } from "./StrategyAdvisor";
 import { InsightsTab } from "./InsightsTab";
 import { OffensesTab } from "./OffensesTab";
 
@@ -157,9 +158,13 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
 
   const marketRead = useMemo(() => computeMarketRead(board), [board]);
   const recommendation = useMemo(
-    () => recommendStrategy(marketRead, d.strategies, d.activeStrategyId),
-    [marketRead, d.strategies, d.activeStrategyId]
+    () => recommendStrategy(board, marketRead, d.strategies, d.activeStrategyId, d.settings.budget),
+    [board, marketRead, d.strategies, d.activeStrategyId, d.settings.budget]
   );
+
+  // A rejected recommendation stays hidden until the engine suggests a different
+  // strategy — draft-session state only, so a fresh page starts clean.
+  const [dismissedRecId, setDismissedRecId] = useState<string | null>(null);
 
   const offenseRows = useMemo(() => {
     const rows = Object.entries(OFFENSE_DATA).map(([team, od]) => ({
@@ -666,13 +671,20 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
             </button>
           </div>
 
-          <MarketReadPanel
-            read={marketRead}
+          <StrategyAdvisor
             recommendation={recommendation}
             activeStrategyId={d.activeStrategyId}
             activeStrategyName={activeStrategy?.name ?? ""}
-            onSwitch={selectStrategy}
+            budget={d.settings.budget}
+            dismissedId={dismissedRecId}
+            onAccept={(id) => {
+              selectStrategy(id);
+              setDismissedRecId(null);
+            }}
+            onDismiss={setDismissedRecId}
           />
+
+          <MarketReadPanel read={marketRead} recommendation={recommendation} />
 
           {endgameSuggested && (
             <div style={styles.endgameBanner}>

@@ -352,11 +352,12 @@ export function computeStrategySlots(strategy: Strategy | undefined): Record<Pos
   return slots;
 }
 
-// Assign each of "my" keepers to the strategy slot at its position whose planned
-// target price is closest to the keeper's cost — so a keeper priced like an RB2/RB3
-// fills that slot rather than always landing in RB1. Greedy closest-pair-first;
-// ties favor the earlier (pricier) slot. Shared by the Strategy tab's slot table
-// and the Board's target-zone brackets so both agree on which slots are filled.
+// Assign each of "my" rostered players (keepers, and drafted players when passed)
+// to the strategy slot at its position whose planned target price is closest to
+// what the player cost — so a keeper priced like an RB2/RB3 fills that slot rather
+// than always landing in RB1. Greedy closest-pair-first; ties favor the earlier
+// (pricier) slot. Shared by the Strategy tab's slot table, the Board's target-zone
+// brackets, and the strategy recommender so all agree on which slots are filled.
 export function assignKeepersToSlots(strategy: Strategy | undefined, myKeepers: BoardRow[]): Map<string, BoardRow> {
   const map = new Map<string, BoardRow>();
   if (!strategy) return map;
@@ -377,7 +378,7 @@ export function assignKeepersToSlots(strategy: Strategy | undefined, myKeepers: 
     // keeper lands in its best-fitting open slot.
     const pairs: { ki: number; si: number; diff: number }[] = [];
     keepers.forEach((k, ki) => {
-      const cost = Number(k.keeperCost) || 0;
+      const cost = Number(k.keeperCost) || Number(k.paid) || 0;
       slots.forEach((s, si) => pairs.push({ ki, si, diff: Math.abs(s.amount - cost) }));
     });
     pairs.sort((a, b) => a.diff - b.diff);
@@ -484,54 +485,125 @@ export function computeMarketRead(board: Board): MarketRead {
   };
 }
 
+// One slot-level observation from evaluating a strategy against the live market.
+export interface StrategyNote {
+  text: string;
+  kind: "hot" | "cheap" | "depleted"; // overpriced band / discounted band / tier is gone
+}
+
+// How one strategy holds up under current prices, over its still-open slots only.
+export interface StrategyEval {
+  // Estimated $ over (+) or under (−) plan to fill this strategy's open slots at
+  // today's prices, including downgrade losses from depleted tiers.
+  extraCost: number;
+  notes: StrategyNote[]; // biggest slot-level issues/advantages, largest impact first
+}
+
 export interface StrategyRecommendation {
   bestId: string;
   bestName: string;
   margin: number; // score gap between best and the active strategy, in budget fraction
-  reasons: string[];
+  reasons: string[]; // market-wide signals (position/star inflation)
   // Qualitative advice from the stars signal, shown even when no strategy in the list
   // is configured top-heavy enough for the scores to separate on that axis.
   hint: string | null;
   scores: Record<string, number>;
+  evals: Record<string, StrategyEval>;
 }
 
-// Scores each strategy against the market read: a strategy is favored when its budget
-// is weighted toward positions/tiers the room is underpaying for, and away from where
-// it's overpaying. Score units ≈ fraction of budget saved vs. paying target everywhere.
+const clampRatio = (r: number) => Math.min(Math.max(r, 0.5), 2);
+
+/*
+ * Scores each strategy by how executable its plan still is, slot by slot:
+ *
+ *  - For every slot my roster hasn't filled yet, ask how players priced like that
+ *    slot are actually selling — paid/target across sold players in a band around
+ *    the slot's planned $ (so $50+ QBs going wild hurts Hero QB without touching
+ *    Value QB's $20–27 slots). With no band data yet, fall back to the position
+ *    ratio, then the overall ratio, dampened toward 1 since the evidence is only
+ *    circumstantial for this band.
+ *  - If the quality tier a slot relies on is gone from the board entirely (best
+ *    remaining player prices far below the plan), the slot can only downgrade:
+ *    half the gap counts as lost value (the other half of the budget re-deploys).
+ *
+ * Score ≈ fraction of budget saved (+) or bled (−) vs. executing the plan at
+ * target prices. The best-scoring strategy is the recommendation.
+ */
 export function recommendStrategy(
+  board: Board,
   read: MarketRead,
   strategies: Strategy[],
-  activeStrategyId: string
+  activeStrategyId: string,
+  budget: number
 ): StrategyRecommendation | null {
   if (read.samples < MIN_MARKET_SAMPLES || strategies.length < 2) return null;
 
-  const scores: Record<string, number> = {};
-  for (const s of strategies) {
-    const total = s.slots.reduce((sum, sl) => sum + (Number(sl.amount) || 0), 0) || 1;
-    let expectedCost = 0;
-    POSITIONS.forEach((pos) => {
-      const share = s.slots.filter((sl) => sl.pos === pos).reduce((sum, sl) => sum + (Number(sl.amount) || 0), 0) / total;
-      const p = read.posInflation[pos];
-      const infl = p && p.n >= MIN_SIGNAL_SAMPLES ? p.ratio : read.overall;
-      expectedCost += share * infl;
-    });
-    let score = 1 - expectedCost;
-    if (read.stars && read.stars.n >= MIN_SIGNAL_SAMPLES) {
-      // Reward/punish budget concentration in star-priced slots on top of the position
-      // signal — this is what separates Stars & Scrubs from a balanced build.
-      const starsShare =
-        s.slots.filter((sl) => (Number(sl.amount) || 0) >= STAR_TARGET_MIN).reduce((sum, sl) => sum + (Number(sl.amount) || 0), 0) /
-        total;
-      score += 0.6 * starsShare * (1 - read.stars.ratio);
+  const sold = board.rows.filter((r) => !r.isKeeper && r.isDrafted && r.target != null && r.paid !== "");
+  const availByPos: Record<string, BoardRow[]> = {};
+  POSITIONS.forEach((pos) => {
+    availByPos[pos] = board.rows.filter((r) => r.pos === pos && !r.isDrafted && !r.isKeeper && r.target != null);
+  });
+  const myFilled = [...board.myKeepers, ...board.myDrafted];
+  const fmtDelta = (ratio: number) => `${ratio >= 1 ? "+" : "−"}${Math.abs(Math.round((ratio - 1) * 100))}%`;
+
+  // How players priced like this slot are actually selling. Returns the ratio to
+  // apply plus how many sold players directly back it (n from the band itself).
+  const bandRatio = (pos: string, amt: number): { ratio: number; n: number } => {
+    const band = sold.filter((r) => r.pos === pos && (r.target as number) >= amt * 0.6 && (r.target as number) <= amt * 1.7);
+    if (band.length >= MIN_SIGNAL_SAMPLES) {
+      const t = band.reduce((s, r) => s + (Number(r.target) || 0), 0);
+      if (t > 0) return { ratio: clampRatio(band.reduce((s, r) => s + (Number(r.paid) || 0), 0) / t), n: band.length };
     }
-    scores[s.id] = score;
+    const posSig = read.posInflation[pos as Pos];
+    if (posSig && posSig.n >= MIN_SIGNAL_SAMPLES) return { ratio: clampRatio(1 + (posSig.ratio - 1) * 0.5), n: 0 };
+    return { ratio: clampRatio(1 + (read.overall - 1) * 0.3), n: 0 };
+  };
+
+  const scores: Record<string, number> = {};
+  const evals: Record<string, StrategyEval> = {};
+  for (const s of strategies) {
+    const filledSlots = assignKeepersToSlots(s, myFilled);
+    const noted: (StrategyNote & { impact: number })[] = [];
+    let extra = 0; // $ over plan across open slots
+    for (const sl of s.slots) {
+      if (filledSlots.has(sl.id)) continue;
+      const amt = Number(sl.amount) || 0;
+      if (amt < 1) continue;
+      const pool = availByPos[sl.pos] || [];
+      const bestAvail = pool.reduce((m, r) => Math.max(m, Number(r.target) || 0), 0);
+
+      if (amt >= 8 && bestAvail < amt * 0.6) {
+        // The tier this slot planned to buy is sold out — forced downgrade.
+        const loss = (amt - bestAvail) * 0.5;
+        extra += loss;
+        noted.push({
+          text: `${slotLabel(sl.id)}: no ${sl.pos}s left near $${amt} — best remaining ~$${bestAvail}`,
+          kind: "depleted",
+          impact: loss,
+        });
+        continue;
+      }
+
+      const { ratio, n } = bandRatio(sl.pos, amt);
+      const loss = amt * (ratio - 1);
+      extra += loss;
+      if (n >= MIN_SIGNAL_SAMPLES && Math.abs(ratio - 1) >= 0.12 && amt >= 5) {
+        noted.push({
+          text: `${slotLabel(sl.id)} ($${amt} planned) projects ~$${Math.max(Math.round(amt * ratio), 1)} — ${sl.pos}s in that range going ${fmtDelta(ratio)} (${n} sold)`,
+          kind: ratio > 1 ? "hot" : "cheap",
+          impact: Math.abs(loss),
+        });
+      }
+    }
+    scores[s.id] = -extra / (budget || 200);
+    noted.sort((a, b) => b.impact - a.impact);
+    evals[s.id] = { extraCost: Math.round(extra), notes: noted.slice(0, 4).map(({ text, kind }) => ({ text, kind })) };
   }
 
   let best = strategies[0];
   for (const s of strategies) if (scores[s.id] > scores[best.id]) best = s;
 
   const reasons: string[] = [];
-  const fmtDelta = (ratio: number) => `${ratio >= 1 ? "+" : "−"}${Math.abs(Math.round((ratio - 1) * 100))}%`;
   const posSignals = POSITIONS.filter((pos) => {
     const p = read.posInflation[pos];
     return p && p.n >= MIN_SIGNAL_SAMPLES && Math.abs(p.ratio - 1) >= 0.08;
@@ -550,7 +622,7 @@ export function recommendStrategy(
   }
 
   const activeScore = scores[activeStrategyId] ?? scores[best.id];
-  return { bestId: best.id, bestName: best.name, margin: scores[best.id] - activeScore, reasons, hint, scores };
+  return { bestId: best.id, bestName: best.name, margin: scores[best.id] - activeScore, reasons, hint, scores, evals };
 }
 
 export function computeStrategyTargets(board: Board, strategySlots: Record<Pos, number>): StrategyTargets {
