@@ -37,12 +37,12 @@ function migrateInterest(state: DraftData): DraftData {
 }
 
 // Roll saved states forward onto the current preset list: presets the user never
-// touched (they still exactly match the legacy defaults they shipped as) are swapped
-// for their refreshed versions, new presets are added, and anything customized —
-// including edited copies of retired presets — is preserved untouched.
+// touched (they still exactly match some shipped generation in LEGACY_STRATEGIES)
+// are swapped for their refreshed versions, new presets are added, and anything
+// customized — including edited copies of retired presets — is preserved untouched.
 function migrateStrategies(state: DraftData): DraftData {
-  const legacyById = new Map(LEGACY_STRATEGIES.map((s) => [s.id, canonicalJson(s)]));
-  const kept = (state.strategies || []).filter((s) => legacyById.get(s.id) !== canonicalJson(s));
+  const legacyJson = new Set(LEGACY_STRATEGIES.map((s) => canonicalJson(s)));
+  const kept = (state.strategies || []).filter((s) => !legacyJson.has(canonicalJson(s)));
   const keptIds = new Set(kept.map((s) => s.id));
   const missingDefaults = DEFAULT_STRATEGIES.filter((d) => !keptIds.has(d.id));
 
