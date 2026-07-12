@@ -56,6 +56,10 @@ export interface KeeperCandidate extends LikelyKeeper {
   likelyDefault: boolean;
 }
 
+// The app user's owner name in the Insights data — their checked keepers count
+// as "mine" (fill strategy slots, spend their budget).
+export const MY_OWNER = "Sean";
+
 export const KEEPER_CANDIDATES: KeeperCandidate[] = OWNER_INSIGHTS.flatMap((o) =>
   o.keeperOptions.map((k) => ({
     uid: uid(k.player),
@@ -79,6 +83,20 @@ export function isExpectedKeeper(playerUid: string, picks: Record<string, boolea
   return KEEPER_CANDIDATE_BY_UID[playerUid]?.likelyDefault ?? false;
 }
 
+// The Insights checkboxes ARE the keeper designation: every checked candidate
+// becomes a real keeper entry (off the board, cost pre-committed against the
+// auction pool, mine = it's on your roster). This is the only keeper source —
+// the old per-player status dropdown is gone.
+export function expectedKeepers(picks: Record<string, boolean>): Record<string, KeeperEntry> {
+  const out: Record<string, KeeperEntry> = {};
+  for (const c of KEEPER_CANDIDATES) {
+    if (isExpectedKeeper(c.uid, picks)) {
+      out[c.uid] = { name: c.player, pos: c.pos as Pos, cost: c.cost, mine: c.owner === MY_OWNER };
+    }
+  }
+  return out;
+}
+
 export function fmtMoney(n: number): string {
   const r = Math.round(n);
   return (r < 0 ? "-$" : "$") + Math.abs(r);
@@ -96,6 +114,20 @@ export function curveDollars(pos: string, effRank: number): number {
   if (!arr) return 1;
   if (effRank <= arr.length) return arr[effRank - 1];
   return arr[arr.length - 1];
+}
+
+// Market price for every player with NOBODY kept: positional rank in ranking
+// order -> the league curve. The stable benchmark for keeper EV on the Insights
+// tab — checked keepers leave the board, so live board targets vanish for
+// exactly the players being evaluated.
+export function marketTargets(players: Player[]): Map<string, number> {
+  const posCounts: Record<string, number> = {};
+  const m = new Map<string, number>();
+  for (const p of [...players].sort((a, b) => a.adp - b.adp)) {
+    posCounts[p.pos] = (posCounts[p.pos] || 0) + 1;
+    m.set(uid(p.name), Math.max(Math.round(curveDollars(p.pos, posCounts[p.pos])), 1));
+  }
+  return m;
 }
 
 // suggest a $ amount for a slot based on how many earlier slots (in fixed array order)
@@ -147,7 +179,6 @@ export interface PlayerMetaEntry {
 
 export interface DraftData {
   settings: Settings;
-  keepers: Record<string, KeeperEntry>;
   drafted: Record<string, DraftedEntry>;
   playerMeta: Record<string, PlayerMetaEntry>;
   // Interest ratings (love/like/dislike) are scoped per strategy: playerId -> interest,
@@ -157,10 +188,10 @@ export interface DraftData {
   customPlayers: Player[];
   strategies: Strategy[];
   activeStrategyId: string;
-  // Which players you expect each league-mate to keep, as an override map keyed
-  // by player uid: true = expected keeper, false = explicitly not, absent = use
-  // the built-in likely default. Drives the pale-orange highlight; edited on the
-  // Insights tab.
+  // THE keeper source of truth: which players you expect each league-mate (and
+  // you) to keep, as an override map keyed by player uid: true = keeper, false =
+  // explicitly not, absent = use the built-in likely default. Checked players
+  // become real keepers via expectedKeepers(); edited on the Insights tab.
   keeperPicks: Record<string, boolean>;
   // Uploaded ranking lists plus which source/blend/overrides are active —
   // see rankings.ts. The active ranking drives board order and price targets.
@@ -189,8 +220,8 @@ export interface BoardRow {
   live: number | null;
   max: number | "";
   interest: Interest;
-  // Set when you expect a league-mate to keep this player (see isExpectedKeeper);
-  // null once the player is actually kept or drafted.
+  // On keeper rows: who's keeping the player and at what cost (from the Insights
+  // candidate data). Null on regular rows.
   likelyKeeper: LikelyKeeper | null;
 }
 
@@ -253,8 +284,7 @@ export function computeBoard(
   playerMeta: Record<string, PlayerMetaEntry>,
   tierOverrides: Record<string, number[]>,
   activeStrategy: Strategy | undefined,
-  activeInterest: Record<string, Interest>,
-  keeperPicks: Record<string, boolean>
+  activeInterest: Record<string, Interest>
 ): Board {
   const totalBudget = settings.teams * settings.budget;
   const keeperList = Object.entries(keepers).map(([id, k]) => ({ id, ...k }));
@@ -339,7 +369,9 @@ export function computeBoard(
         live: null,
         max: meta.max ?? "",
         interest: activeInterest[r.id] ?? "neutral",
-        likelyKeeper: null,
+        // Keeper rows keep their owner/cost info so the board can label who's
+        // taking the player out of the pool.
+        likelyKeeper: KEEPER_CANDIDATE_BY_UID[r.id] ?? null,
       };
     }
     const d = drafted[r.id];
@@ -355,10 +387,7 @@ export function computeBoard(
       live,
       max: meta.max ?? "",
       interest: activeInterest[r.id] ?? "neutral",
-      likelyKeeper:
-        !isDrafted && KEEPER_CANDIDATE_BY_UID[r.id] && isExpectedKeeper(r.id, keeperPicks)
-          ? { owner: KEEPER_CANDIDATE_BY_UID[r.id].owner, cost: KEEPER_CANDIDATE_BY_UID[r.id].cost }
-          : null,
+      likelyKeeper: null,
     };
   });
 
@@ -465,10 +494,8 @@ export function computeStrategyZones(rows: BoardRow[], strategy: Strategy | unde
     strategy,
     rows.filter((r) => r.isKeeper && r.mine)
   );
-  // Predicted keepers (likelyKeeper) won't reach the auction, so they're not
-  // valid slot targets even though they aren't formally kept yet.
   const candidates = rows.filter(
-    (r) => r.pos === pos && r.target != null && !r.isDrafted && !r.isKeeper && !r.likelyKeeper && r.interest !== "dislike"
+    (r) => r.pos === pos && r.target != null && !r.isDrafted && !r.isKeeper && r.interest !== "dislike"
   );
   return strategy.slots
     .filter((sl) => sl.pos === pos && !keeperSlots.has(sl.id) && (Number(sl.amount) || 0) > 0)
@@ -488,19 +515,6 @@ export interface StrategyTargets {
   sums: Record<string, number>;
   listByPos: Record<string, BoardRow[]>;
 }
-
-// Single combined dropdown covering both draft/keeper ownership and scouting interest —
-// a player is either an ownership state (Mine/Keeper/My Keeper) or an interest rating
-// (Love/Like/Dislike), never both at once, so one value suffices.
-export const STATUS_OPTIONS = [
-  { value: "", label: "Open", color: "#3A3F4A", text: "#C9CCD2" },
-  { value: "love", label: "Love", color: "#2E7D46", text: "#EDEEF0" },
-  { value: "like", label: "Like", color: "#4C8F5B", text: "#EDEEF0" },
-  { value: "dislike", label: "Dislike", color: "#A83A34", text: "#EDEEF0" },
-  { value: "mine", label: "Mine", color: "#3B6FA0", text: "#EDEEF0" },
-  { value: "keeper", label: "Keeper", color: "#8A5A2E", text: "#EDEEF0" },
-  { value: "keeper-mine", label: "My Keeper", color: "#5B3F8A", text: "#EDEEF0" },
-] as const;
 
 // A player whose league-history target is at least this much counts as "top talent"
 // for the stars-vs-depth market signal.
@@ -691,7 +705,7 @@ export function computeStrategyTargets(board: Board, strategySlots: Record<Pos, 
       board.myDrafted.filter((r) => r.pos === pos).length + board.myKeepers.filter((k) => k.pos === pos).length;
     const need = Math.max((strategySlots[pos] || 0) - filledMine, 0);
     const avail = board.rows
-      .filter((r) => r.pos === pos && !r.isDrafted && !r.isKeeper && !r.likelyKeeper)
+      .filter((r) => r.pos === pos && !r.isDrafted && !r.isKeeper)
       .sort((a, b) => (a.effRank as number) - (b.effRank as number));
     const picked = avail.slice(0, need);
     picked.forEach((r) => targetIds.add(r.id));

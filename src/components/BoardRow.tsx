@@ -41,9 +41,10 @@ export function BoardRow({
   // Drop-target edge wins over a tier break line while a drag is in flight.
   const tBreakStyle = { ...(tierBreak ? { borderTop: `2px solid ${tierColor(row.tier)}` } : {}), ...dropEdge };
   const targetGlow = isTarget && !dimmed ? { boxShadow: "inset 3px 0 0 #4CAF6B" } : {};
-  // Pale orange = a league-mate will likely keep this player, so plan as if
-  // they won't be in the pool. The warning outranks the like/love tint.
-  const likelyKeeper = !row.isKeeper && !row.isDrafted ? row.likelyKeeper : null;
+  // Pale orange = this player is checked as a keeper on the Insights tab, so
+  // they're out of the auction pool. Keeper rows also dim like drafted ones;
+  // the tint + tag say who has them.
+  const likelyKeeper = row.likelyKeeper;
   const rowTint = likelyKeeper
     ? "rgba(232, 163, 61, 0.16)"
     : row.interest === "love"
@@ -60,7 +61,7 @@ export function BoardRow({
   const keeperTag = likelyKeeper && (
     <span
       style={{ color: "#E8A33D" }}
-      title={`Likely 2026 keeper for ${likelyKeeper.owner} ($${likelyKeeper.cost}) — probably not in the pool`}
+      title={`2026 keeper for ${likelyKeeper.owner} ($${likelyKeeper.cost}) — out of the auction pool. Change on the Insights tab.`}
     >
       {" · K: "}
       {likelyKeeper.owner === "Sean" ? "you" : likelyKeeper.owner} ${likelyKeeper.cost}

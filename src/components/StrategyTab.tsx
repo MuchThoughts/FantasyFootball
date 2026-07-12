@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Strategy } from "@/lib/data/strategies";
 import {
   assignKeepersToSlots,
@@ -29,10 +29,6 @@ interface StrategyTabProps {
   onDelete: (id: string) => void;
   onReset: (id: string) => void;
   onRate: (row: BoardRow, value: Interest) => void;
-  // Keeper management reuses the app's global keeper machinery (same as the
-  // Board's status dropdown), so keepers set here also show on the Board.
-  onStatus: (row: BoardRow, value: string) => void;
-  onKeeperCost: (row: BoardRow, value: string) => void;
 }
 
 // A single clickable player name: click = Like, double-click = Love, press-and-hold =
@@ -82,19 +78,12 @@ export function StrategyTab({
   onDelete,
   onReset,
   onRate,
-  onStatus,
-  onKeeperCost,
 }: StrategyTabProps) {
   const active = strategies.find((s) => s.id === activeStrategyId) || strategies[0];
 
-  const [keeperName, setKeeperName] = useState("");
-  const [keeperCostInput, setKeeperCostInput] = useState("");
-  const [keeperError, setKeeperError] = useState<string | null>(null);
-
-  // The user's keepers (global to the profile), and any undrafted, un-kept
-  // player they can still designate as one.
+  // The user's keepers — the players checked under your name on the Insights
+  // tab, which is the app's only keeper designation.
   const myKeepers = useMemo(() => boardRows.filter((r) => r.isKeeper && r.mine), [boardRows]);
-  const eligibleKeepers = useMemo(() => boardRows.filter((r) => !r.isDrafted && !r.isKeeper), [boardRows]);
 
   // Assign each keeper to the slot at its position whose planned target price is
   // closest to the keeper's cost — shared with the Board's target-zone brackets.
@@ -107,21 +96,6 @@ export function StrategyTab({
     return k ? Number(k.keeperCost) || 0 : Number(sl.amount) || 0;
   };
 
-  const addKeeper = () => {
-    const name = keeperName.trim().toLowerCase();
-    if (!name) return;
-    const row = boardRows.find((r) => r.name.toLowerCase() === name && !r.isDrafted);
-    if (!row) {
-      setKeeperError("No matching player found on the board.");
-      return;
-    }
-    onStatus(row, "keeper-mine");
-    if (keeperCostInput.trim() !== "") onKeeperCost(row, keeperCostInput.trim());
-    setKeeperName("");
-    setKeeperCostInput("");
-    setKeeperError(null);
-  };
-
   const total = active.slots.reduce((s, sl) => s + slotAmount(sl), 0);
   const starterIds = new Set(["qb1", "qb2", "rb1", "rb2", "wr1", "wr2", "te", "def", "flex1", "flex2"]);
   const starterTotal = active.slots.filter((sl) => starterIds.has(sl.id)).reduce((s, sl) => s + slotAmount(sl), 0);
@@ -131,16 +105,14 @@ export function StrategyTab({
     posTotals[sl.pos] = (posTotals[sl.pos] || 0) + slotAmount(sl);
   });
 
-  // Excludes drafted/kept/predicted-keeper/disliked players so the list always
-  // shows live, auction-available candidates — disliking one here removes it and
-  // lets the next-closest backfill.
+  // Excludes drafted/kept/disliked players so the list always shows live,
+  // auction-available candidates — disliking one here removes it and lets the
+  // next-closest backfill.
   const byPos = useMemo(() => {
     const m: Record<string, BoardRow[]> = {};
     POSITIONS.forEach((p) => {
       m[p] = boardRows
-        .filter(
-          (r) => r.pos === p && r.target != null && !r.isDrafted && !r.isKeeper && !r.likelyKeeper && r.interest !== "dislike"
-        )
+        .filter((r) => r.pos === p && r.target != null && !r.isDrafted && !r.isKeeper && r.interest !== "dislike")
         .sort((a, b) => (a.target as number) - (b.target as number));
     });
     return m;
@@ -201,64 +173,26 @@ export function StrategyTab({
 
         <div style={styles.panelTitle}>My keepers</div>
         <div style={{ fontSize: 11, color: "#8B92A0", marginBottom: 8 }}>
-          Add the players you&apos;re keeping and their cost. Each one fills the earliest slot at its position below —
-          hiding that slot&apos;s targets and counting its cost toward your budget.
+          The players checked under your name on the Insights tab. Each one fills the closest-priced slot at its
+          position below and counts its cost toward your budget — manage them there.
         </div>
-        {myKeepers.length > 0 && (
+        {myKeepers.length > 0 ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 8 }}>
             {myKeepers.map((k) => (
               <div key={k.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <span style={{ ...styles.posTagSm, background: POS_COLOR[k.pos] }}>{k.pos}</span>
                 <span style={{ flex: 1, fontSize: 12.5 }}>{k.name}</span>
-                <span style={{ fontSize: 11, color: "#8B92A0" }}>$</span>
-                <input
-                  style={{ ...styles.cellInput, width: 50 }}
-                  type="number"
-                  placeholder="cost"
-                  value={k.keeperCost}
-                  onChange={(e) => onKeeperCost(k, e.target.value)}
-                />
-                <button style={styles.removeBtn} title="Remove keeper" onClick={() => onStatus(k, "")}>
-                  ✕
-                </button>
+                <span style={{ ...styles.tdMono, fontSize: 12.5, color: "#8FCB9E" }}>
+                  ${Number(k.keeperCost) || 0}
+                </span>
               </div>
             ))}
           </div>
+        ) : (
+          <div style={{ fontSize: 11, color: "#5B6270", marginBottom: 8 }}>
+            None checked — pick yours in your Keeper Watch on the Insights tab.
+          </div>
         )}
-        <div style={styles.row}>
-          <input
-            list="keeper-players"
-            style={{ ...styles.input, flex: 1 }}
-            placeholder="Player name"
-            value={keeperName}
-            onChange={(e) => {
-              setKeeperName(e.target.value);
-              setKeeperError(null);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") addKeeper();
-            }}
-          />
-          <datalist id="keeper-players">
-            {eligibleKeepers.map((r) => (
-              <option key={r.id} value={r.name} />
-            ))}
-          </datalist>
-          <input
-            style={{ ...styles.input, width: 64 }}
-            type="number"
-            placeholder="$"
-            value={keeperCostInput}
-            onChange={(e) => setKeeperCostInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") addKeeper();
-            }}
-          />
-          <button style={styles.primaryBtn} onClick={addKeeper}>
-            Add
-          </button>
-        </div>
-        {keeperError && <div style={{ fontSize: 11, color: "#E1524B", marginTop: 6 }}>{keeperError}</div>}
 
         <div style={{ fontSize: 11, color: "#8B92A0", margin: "14px 0 10px" }}>
           Click a target to mark Like, double-click for Love, press and hold to Dislike (swaps in the next closest

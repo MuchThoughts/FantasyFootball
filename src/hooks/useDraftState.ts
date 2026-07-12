@@ -2,14 +2,13 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import { DraftData, Interest, defaultSettings } from "@/lib/draftLogic";
+import { DraftData, Interest, KEEPER_CANDIDATE_BY_UID, defaultSettings } from "@/lib/draftLogic";
 import { DEFAULT_STRATEGIES, LEGACY_STRATEGIES } from "@/lib/data/strategies";
 import { defaultRankingConfig } from "@/lib/rankings";
 
 export function defaultDraftData(): DraftData {
   return {
     settings: defaultSettings(),
-    keepers: {},
     drafted: {},
     playerMeta: {},
     interestByStrategy: {},
@@ -35,6 +34,20 @@ function migrateInterest(state: DraftData): DraftData {
   }
   if (Object.keys(legacy).length === 0) return state;
   return { ...state, interestByStrategy: { [state.activeStrategyId]: legacy } };
+}
+
+// Keepers used to be a stored map (set via the board's old Status dropdown);
+// they're now derived from keeperPicks + the Insights candidate list. Fold any
+// legacy keeper entries that match a known candidate into keeperPicks (entries
+// for unknown players had no owner and are dropped), then strip the dead field.
+function migrateKeepers(state: DraftData & { keepers?: Record<string, unknown> }): DraftData {
+  const { keepers: legacy, ...rest } = state;
+  if (!legacy || Object.keys(legacy).length === 0) return rest;
+  const keeperPicks = { ...rest.keeperPicks };
+  for (const id of Object.keys(legacy)) {
+    if (KEEPER_CANDIDATE_BY_UID[id]) keeperPicks[id] = true;
+  }
+  return { ...rest, keeperPicks };
 }
 
 // Roll saved states forward onto the current preset list: presets the user never
@@ -108,7 +121,7 @@ export function useDraftState(profileId: string | null) {
       if (cancelled) return;
 
       if (row && row.state && Object.keys(row.state as object).length > 0) {
-        const merged = migrateStrategies(migrateInterest({ ...defaultDraftData(), ...(row.state as Partial<DraftData>) }));
+        const merged = migrateKeepers(migrateStrategies(migrateInterest({ ...defaultDraftData(), ...(row.state as Partial<DraftData>) })));
         lastSyncedJson.current = canonicalJson(merged);
         setData(merged);
       } else {
@@ -133,7 +146,7 @@ export function useDraftState(profileId: string | null) {
         (payload) => {
           const newState = (payload.new as { state?: Partial<DraftData> } | null)?.state;
           if (!newState) return;
-          const merged = migrateStrategies(migrateInterest({ ...defaultDraftData(), ...newState }));
+          const merged = migrateKeepers(migrateStrategies(migrateInterest({ ...defaultDraftData(), ...newState })));
           const json = canonicalJson(merged);
           if (json === lastSyncedJson.current) return; // echo of our own write
           lastSyncedJson.current = json;

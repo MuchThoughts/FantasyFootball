@@ -13,8 +13,10 @@ import {
   computeStrategySlots,
   computeStrategyTargets,
   computeStrategyZones,
+  expectedKeepers,
   fmtMoney,
   KEEPER_CANDIDATE_BY_UID,
+  marketTargets,
   POSITIONS,
   recommendStrategy,
   StrategyZone,
@@ -149,18 +151,19 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
     [d.interestByStrategy, d.activeStrategyId]
   );
 
+  // Keepers are derived, not stored: the Insights checkboxes (keeperPicks over
+  // the built-in defaults) are the only keeper designation in the app.
+  const keepers = useMemo(() => expectedKeepers(d.keeperPicks), [d.keeperPicks]);
+
   const board = useMemo(
-    () => computeBoard(d.settings, d.keepers, d.drafted, allPlayers, d.playerMeta, d.tierOverrides, activeStrategy, activeInterest, d.keeperPicks),
-    [d.settings, d.keepers, d.drafted, allPlayers, d.playerMeta, d.tierOverrides, activeStrategy, activeInterest, d.keeperPicks]
+    () => computeBoard(d.settings, keepers, d.drafted, allPlayers, d.playerMeta, d.tierOverrides, activeStrategy, activeInterest),
+    [d.settings, keepers, d.drafted, allPlayers, d.playerMeta, d.tierOverrides, activeStrategy, activeInterest]
   );
 
-  // Auction target for every rostered player, so the Insights keeper tables can
-  // show each candidate's projected price (and expected value vs its keeper cost).
-  const targetByUid = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const r of board.rows) if (r.target != null) m.set(r.id, r.target);
-    return m;
-  }, [board.rows]);
+  // Stable nobody-kept market price per player, so the Insights keeper tables can
+  // show each candidate's projected price (and EV vs keeper cost) even after the
+  // player is checked and leaves the live board.
+  const targetByUid = useMemo(() => marketTargets(allPlayers), [allPlayers]);
 
   const strategySlots = useMemo(() => computeStrategySlots(activeStrategy), [activeStrategy]);
   const strategyTargets = useMemo(() => computeStrategyTargets(board, strategySlots), [board, strategySlots]);
@@ -272,54 +275,6 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
     [update]
   );
 
-  // The combined Status dropdown on the board: ownership and interest are mutually
-  // exclusive here, so setting one clears the other. Interest is per active strategy;
-  // ownership is global.
-  const setStatus = useCallback(
-    (row: BoardRowType, value: string) => {
-      const isInterest = value === "" || value === "love" || value === "like" || value === "dislike";
-      update((prev) => {
-        const map = { ...(prev.interestByStrategy[prev.activeStrategyId] ?? {}) };
-        if (isInterest) {
-          if (value === "" ) delete map[row.id];
-          else map[row.id] = value as Interest;
-          const nextKeepers = { ...prev.keepers };
-          delete nextKeepers[row.id];
-          const nextDrafted = { ...prev.drafted };
-          delete nextDrafted[row.id];
-          return {
-            ...prev,
-            keepers: nextKeepers,
-            drafted: nextDrafted,
-            interestByStrategy: { ...prev.interestByStrategy, [prev.activeStrategyId]: map },
-          };
-        }
-        // ownership: mine / keeper / keeper-mine — clear any interest for this strategy
-        delete map[row.id];
-        const wantsKeeper = value === "keeper" || value === "keeper-mine";
-        const wantsMine = value === "mine" || value === "keeper-mine";
-        const interestByStrategy = { ...prev.interestByStrategy, [prev.activeStrategyId]: map };
-        if (wantsKeeper) {
-          const nextKeepers = {
-            ...prev.keepers,
-            [row.id]: { name: row.name, pos: row.pos, cost: prev.keepers[row.id]?.cost ?? "", mine: wantsMine },
-          };
-          const nextDrafted = { ...prev.drafted };
-          delete nextDrafted[row.id];
-          return { ...prev, keepers: nextKeepers, drafted: nextDrafted, interestByStrategy };
-        }
-        const nextKeepers = { ...prev.keepers };
-        delete nextKeepers[row.id];
-        const nextDrafted = {
-          ...prev.drafted,
-          [row.id]: { price: prev.drafted[row.id] ? prev.drafted[row.id].price : "", mine: wantsMine },
-        };
-        return { ...prev, keepers: nextKeepers, drafted: nextDrafted, interestByStrategy };
-      });
-    },
-    [update]
-  );
-
   // Toggle whether you expect a league-mate to keep a player. Stored as a sparse
   // override map: entries that match the built-in likely default are dropped so
   // the saved state only records where you disagree with the defaults.
@@ -344,19 +299,6 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
         playerMeta: {
           ...prev.playerMeta,
           [id]: { ...prev.playerMeta[id], [field]: parsed },
-        },
-      }));
-    },
-    [update]
-  );
-
-  const setKeeperCost = useCallback(
-    (row: BoardRowType, value: string) => {
-      update((prev) => ({
-        ...prev,
-        keepers: {
-          ...prev.keepers,
-          [row.id]: { name: row.name, pos: row.pos, mine: prev.keepers[row.id]?.mine ?? false, cost: value === "" ? "" : Number(value) },
         },
       }));
     },
@@ -527,7 +469,7 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
   }, [addForm, update]);
 
   const resetAll = useCallback(() => {
-    if (!window.confirm("Reset all keepers, draft picks, and settings for this profile? This can't be undone.")) return;
+    if (!window.confirm("Reset all draft picks, keeper picks, and settings for this profile? This can't be undone.")) return;
     update(() => defaultDraftData());
   }, [update]);
 
@@ -1006,8 +948,6 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
           onDelete={deleteStrategy}
           onReset={resetStrategy}
           onRate={setInterest}
-          onStatus={setStatus}
-          onKeeperCost={setKeeperCost}
         />
       )}
 

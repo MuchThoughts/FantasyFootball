@@ -20,8 +20,9 @@ export function InsightsTab({ keeperPicks, targetByUid, onToggleKeeper }: Insigh
         Built from your league&apos;s 2023–2025 auction results and the official keeper sheet. Keeper costs shown
         are 2026 prices (last salary + $5, undrafted = $10); a player can only be kept two years running. Keeper
         values are judged against current 2026 rankings — target is your league&apos;s 3-yr price at the
-        player&apos;s 2026 positional rank, so trades, injuries, and role changes are priced in. Check the two you
-        think each owner will keep to drive the pale-orange &ldquo;likely gone&rdquo; highlight on the board.
+        player&apos;s 2026 positional rank, so trades, injuries, and role changes are priced in. The checkboxes ARE
+        the keeper designation: checked players come off the board (tinted orange), their cost is committed against
+        the auction pool, and your own checks fill your strategy slots.
       </div>
       <LeagueBaseline />
       <div style={styles.list}>
@@ -224,7 +225,7 @@ function InsightCard({
           </div>
           <div style={{ fontSize: 10, color: "#5B6270", marginBottom: 6 }}>
             Top 4 by value (target − keeper cost). Check the two you expect {isSean ? "to keep" : `${d.owner} to keep`}{" "}
-            — checked players turn pale orange on the board.
+            — checked players are treated as kept: off the board and their cost pre-committed.
           </div>
 
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
