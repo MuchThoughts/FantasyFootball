@@ -2,7 +2,17 @@
 
 import { useMemo, useState } from "react";
 import { Strategy } from "@/lib/data/strategies";
-import { BoardRow, FIXED_SLOT_POS, fmtMoney, Interest, POS_COLOR, POSITIONS, Pos, slotLabel } from "@/lib/draftLogic";
+import {
+  assignKeepersToSlots,
+  BoardRow,
+  FIXED_SLOT_POS,
+  fmtMoney,
+  Interest,
+  POS_COLOR,
+  POSITIONS,
+  Pos,
+  slotLabel,
+} from "@/lib/draftLogic";
 import { usePlayerRating } from "@/hooks/usePlayerRating";
 import { styles, chipActive } from "./styles";
 
@@ -85,42 +95,8 @@ export function StrategyTab({
   const eligibleKeepers = useMemo(() => boardRows.filter((r) => !r.isDrafted && !r.isKeeper), [boardRows]);
 
   // Assign each keeper to the slot at its position whose planned target price is
-  // closest to the keeper's cost — so a keeper priced like an RB2/RB3 fills that
-  // slot rather than always landing in RB1. Ties favor the higher (earlier) slot.
-  const slotKeeper = useMemo(() => {
-    const map = new Map<string, BoardRow>();
-
-    const slotsByPos: Record<string, { id: string; amount: number }[]> = {};
-    active.slots.forEach((sl) => {
-      (slotsByPos[sl.pos] = slotsByPos[sl.pos] || []).push({ id: sl.id, amount: Number(sl.amount) || 0 });
-    });
-    const keepersByPos: Record<string, BoardRow[]> = {};
-    myKeepers.forEach((k) => {
-      (keepersByPos[k.pos] = keepersByPos[k.pos] || []).push(k);
-    });
-
-    Object.entries(keepersByPos).forEach(([pos, keepers]) => {
-      const slots = slotsByPos[pos] || [];
-      // Every keeper/slot pairing, ranked by how close the keeper's cost is to
-      // the slot's target price; greedily take the closest pair first so each
-      // keeper lands in its best-fitting open slot.
-      const pairs: { ki: number; si: number; diff: number }[] = [];
-      keepers.forEach((k, ki) => {
-        const cost = Number(k.keeperCost) || 0;
-        slots.forEach((s, si) => pairs.push({ ki, si, diff: Math.abs(s.amount - cost) }));
-      });
-      pairs.sort((a, b) => a.diff - b.diff);
-      const usedK = new Set<number>();
-      const usedS = new Set<number>();
-      pairs.forEach(({ ki, si }) => {
-        if (usedK.has(ki) || usedS.has(si)) return;
-        usedK.add(ki);
-        usedS.add(si);
-        map.set(slots[si].id, keepers[ki]);
-      });
-    });
-    return map;
-  }, [myKeepers, active.slots]);
+  // closest to the keeper's cost — shared with the Board's target-zone brackets.
+  const slotKeeper = useMemo(() => assignKeepersToSlots(active, myKeepers), [myKeepers, active]);
 
   // A keeper-filled slot contributes the keeper's actual cost (not the planned
   // amount) to the budget totals.
