@@ -40,19 +40,16 @@ interface StrategyTabProps {
 function CompPlayerItem({ row, onRate }: { row: BoardRow; onRate: (row: BoardRow, value: Interest) => void }) {
   const { pressing, handlers } = usePlayerRating(row.interest, (v) => onRate(row, v));
   const textColor = row.interest === "love" ? "#4CAF6B" : row.interest === "like" ? "#8FCB9E" : "#C9CCD2";
-  // Pale orange = you expect a league-mate to keep this player (see isExpectedKeeper).
-  const lk = row.likelyKeeper;
-  const keeperHint = lk ? ` — Likely keeper for ${lk.owner === "Sean" ? "you" : lk.owner} ($${lk.cost})` : "";
 
   return (
     <button
       {...handlers}
-      title={`Click = Like, double-click = Love, press and hold = Dislike (click again to undo)${keeperHint}`}
+      title="Click = Like, double-click = Love, press and hold = Dislike (click again to undo)"
       style={{
         display: "block",
         width: "100%",
         textAlign: "left",
-        background: pressing ? "rgba(168, 58, 52, 0.35)" : lk ? "rgba(232, 163, 61, 0.16)" : "transparent",
+        background: pressing ? "rgba(168, 58, 52, 0.35)" : "transparent",
         border: "none",
         borderRadius: 4,
         padding: "2px 4px",
@@ -67,7 +64,6 @@ function CompPlayerItem({ row, onRate }: { row: BoardRow; onRate: (row: BoardRow
       }}
     >
       {row.name} <span style={styles.compPrice}>(${row.target})</span>
-      {lk && <span style={{ color: "#E8A33D" }}> K: {lk.owner === "Sean" ? "you" : lk.owner}</span>}
     </button>
   );
 }
