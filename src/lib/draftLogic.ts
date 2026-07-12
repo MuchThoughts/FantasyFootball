@@ -39,19 +39,44 @@ export function uid(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
-// Players a league-mate will most likely keep (the likely-flagged options in the
-// Insights data), keyed by player uid. Ineligible players (already kept twice)
-// are never flagged likely there, so they correctly stay in the pool. Used to
-// tint rows pale orange as a "probably won't be available at auction" warning.
+// Players a league-mate might keep, drawn from the Insights keeper options.
+// Ineligible players (already kept twice) are never listed there, so they
+// correctly stay in the pool. `likelyDefault` is the built-in guess (the
+// ★-flagged options); the user can override it per player on the Insights tab.
+// The effective set tints rows pale orange as a "probably won't be available at
+// auction" warning.
 export interface LikelyKeeper {
   owner: string;
   cost: number;
 }
-export const LIKELY_KEEPERS: Record<string, LikelyKeeper> = {};
-for (const o of OWNER_INSIGHTS) {
-  for (const k of o.keeperOptions) {
-    if (k.likely) LIKELY_KEEPERS[uid(k.player)] = { owner: o.owner, cost: k.cost };
-  }
+export interface KeeperCandidate extends LikelyKeeper {
+  uid: string;
+  player: string;
+  pos: string;
+  likelyDefault: boolean;
+}
+
+export const KEEPER_CANDIDATES: KeeperCandidate[] = OWNER_INSIGHTS.flatMap((o) =>
+  o.keeperOptions.map((k) => ({
+    uid: uid(k.player),
+    player: k.player,
+    pos: k.pos,
+    owner: o.owner,
+    cost: k.cost,
+    likelyDefault: !!k.likely,
+  }))
+);
+
+// A player is on exactly one owner's roster, so keying candidates by uid is safe.
+export const KEEPER_CANDIDATE_BY_UID: Record<string, KeeperCandidate> = {};
+for (const c of KEEPER_CANDIDATES) KEEPER_CANDIDATE_BY_UID[c.uid] = c;
+
+// Effective "expected keeper" = the user's per-player override if set, else the
+// built-in likely default.
+export function isExpectedKeeper(playerUid: string, picks: Record<string, boolean>): boolean {
+  const override = picks[playerUid];
+  if (override !== undefined) return override;
+  return KEEPER_CANDIDATE_BY_UID[playerUid]?.likelyDefault ?? false;
 }
 
 export function fmtMoney(n: number): string {
@@ -132,6 +157,11 @@ export interface DraftData {
   customPlayers: Player[];
   strategies: Strategy[];
   activeStrategyId: string;
+  // Which players you expect each league-mate to keep, as an override map keyed
+  // by player uid: true = expected keeper, false = explicitly not, absent = use
+  // the built-in likely default. Drives the pale-orange highlight; edited on the
+  // Insights tab.
+  keeperPicks: Record<string, boolean>;
   // Uploaded ranking lists plus which source/blend/overrides are active —
   // see rankings.ts. The active ranking drives board order and price targets.
   rankingSources: RankingSource[];
@@ -159,7 +189,7 @@ export interface BoardRow {
   live: number | null;
   max: number | "";
   interest: Interest;
-  // Set when a league-mate is likely to keep this player (see LIKELY_KEEPERS);
+  // Set when you expect a league-mate to keep this player (see isExpectedKeeper);
   // null once the player is actually kept or drafted.
   likelyKeeper: LikelyKeeper | null;
 }
@@ -223,7 +253,8 @@ export function computeBoard(
   playerMeta: Record<string, PlayerMetaEntry>,
   tierOverrides: Record<string, number[]>,
   activeStrategy: Strategy | undefined,
-  activeInterest: Record<string, Interest>
+  activeInterest: Record<string, Interest>,
+  keeperPicks: Record<string, boolean>
 ): Board {
   const totalBudget = settings.teams * settings.budget;
   const keeperList = Object.entries(keepers).map(([id, k]) => ({ id, ...k }));
@@ -324,7 +355,10 @@ export function computeBoard(
       live,
       max: meta.max ?? "",
       interest: activeInterest[r.id] ?? "neutral",
-      likelyKeeper: isDrafted ? null : LIKELY_KEEPERS[r.id] ?? null,
+      likelyKeeper:
+        !isDrafted && KEEPER_CANDIDATE_BY_UID[r.id] && isExpectedKeeper(r.id, keeperPicks)
+          ? { owner: KEEPER_CANDIDATE_BY_UID[r.id].owner, cost: KEEPER_CANDIDATE_BY_UID[r.id].cost }
+          : null,
     };
   });
 

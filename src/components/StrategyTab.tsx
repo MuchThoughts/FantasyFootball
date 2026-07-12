@@ -40,7 +40,7 @@ interface StrategyTabProps {
 function CompPlayerItem({ row, onRate }: { row: BoardRow; onRate: (row: BoardRow, value: Interest) => void }) {
   const { pressing, handlers } = usePlayerRating(row.interest, (v) => onRate(row, v));
   const textColor = row.interest === "love" ? "#4CAF6B" : row.interest === "like" ? "#8FCB9E" : "#C9CCD2";
-  // Pale orange = a league-mate will likely keep this player (see LIKELY_KEEPERS).
+  // Pale orange = you expect a league-mate to keep this player (see isExpectedKeeper).
   const lk = row.likelyKeeper;
   const keeperHint = lk ? ` — Likely keeper for ${lk.owner === "Sean" ? "you" : lk.owner} ($${lk.cost})` : "";
 

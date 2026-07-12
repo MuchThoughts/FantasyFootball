@@ -14,6 +14,7 @@ import {
   computeStrategyTargets,
   computeStrategyZones,
   fmtMoney,
+  KEEPER_CANDIDATE_BY_UID,
   POSITIONS,
   recommendStrategy,
   StrategyZone,
@@ -149,9 +150,17 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
   );
 
   const board = useMemo(
-    () => computeBoard(d.settings, d.keepers, d.drafted, allPlayers, d.playerMeta, d.tierOverrides, activeStrategy, activeInterest),
-    [d.settings, d.keepers, d.drafted, allPlayers, d.playerMeta, d.tierOverrides, activeStrategy, activeInterest]
+    () => computeBoard(d.settings, d.keepers, d.drafted, allPlayers, d.playerMeta, d.tierOverrides, activeStrategy, activeInterest, d.keeperPicks),
+    [d.settings, d.keepers, d.drafted, allPlayers, d.playerMeta, d.tierOverrides, activeStrategy, activeInterest, d.keeperPicks]
   );
+
+  // Auction target for every rostered player, so the Insights keeper tables can
+  // show each candidate's projected price (and expected value vs its keeper cost).
+  const targetByUid = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const r of board.rows) if (r.target != null) m.set(r.id, r.target);
+    return m;
+  }, [board.rows]);
 
   const strategySlots = useMemo(() => computeStrategySlots(activeStrategy), [activeStrategy]);
   const strategyTargets = useMemo(() => computeStrategyTargets(board, strategySlots), [board, strategySlots]);
@@ -306,6 +315,22 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
           [row.id]: { price: prev.drafted[row.id] ? prev.drafted[row.id].price : "", mine: wantsMine },
         };
         return { ...prev, keepers: nextKeepers, drafted: nextDrafted, interestByStrategy };
+      });
+    },
+    [update]
+  );
+
+  // Toggle whether you expect a league-mate to keep a player. Stored as a sparse
+  // override map: entries that match the built-in likely default are dropped so
+  // the saved state only records where you disagree with the defaults.
+  const setKeeperPick = useCallback(
+    (playerUid: string, next: boolean) => {
+      update((prev) => {
+        const picks = { ...prev.keeperPicks };
+        const cand = KEEPER_CANDIDATE_BY_UID[playerUid];
+        if (cand && next === cand.likelyDefault) delete picks[playerUid];
+        else picks[playerUid] = next;
+        return { ...prev, keeperPicks: picks };
       });
     },
     [update]
@@ -977,7 +1002,9 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
         />
       )}
 
-      {tab === "drafters" && <InsightsTab />}
+      {tab === "drafters" && (
+        <InsightsTab keeperPicks={d.keeperPicks} targetByUid={targetByUid} onToggleKeeper={setKeeperPick} />
+      )}
 
       {tab === "offenses" && <OffensesTab rows={offenseRows} sort={offSort} setSort={setOffSort} />}
 
