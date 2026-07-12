@@ -233,9 +233,9 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
 
   // Target-zone brackets: with a single position filtered, mark where the active
   // strategy's slot targets (the ~5 players priced nearest each slot's planned $)
-  // sit among the visible rows. Each zone becomes a bracket column to the right of
-  // the table, spanning from its highest-ranked target to its lowest. Hidden on
-  // ALL/Liked and in endgame mode.
+  // sit among the visible rows. Each zone becomes a pinned bracket column between
+  // Rank and Player, spanning from its highest-ranked target to its lowest.
+  // Hidden on ALL/Liked and in endgame mode.
   const zoneSpans = useMemo(() => {
     if (!isPosFilter || endgameMode) return [];
     const zones = computeStrategyZones(board.rows, activeStrategy, posFilter);
@@ -383,6 +383,14 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
   // Board drag-and-drop: dropping a row pins that player at the drop spot (a
   // ranking override). Only meaningful while the board is in rank order.
   const boardDragEnabled = sortKey === "adp" && !endgameMode;
+
+  // Rank, Plan (zone brackets), and Player are all pinned in that order — each
+  // needs a sticky "left" offset equal to the total width of the pinned columns
+  // before it. Rank's own width depends on whether the drag handle is showing.
+  const ZONE_WIDTH = 17;
+  const rankStickyWidth = boardDragEnabled ? 62 : 38;
+  const playerStickyLeft = rankStickyWidth + zoneSpans.length * ZONE_WIDTH;
+
   const effRankById = useMemo(() => {
     const m = new Map<string, number>();
     allPlayers.forEach((p) => m.set(uid(p.name), p.adp));
@@ -784,18 +792,23 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
                   >
                     Rk{sortKey === "adp" ? " ▾" : ""}
                   </th>
-                  <th style={{ ...styles.th, ...styles.thSticky2, ...(boardDragEnabled ? styles.stickyDragCol2 : {}) }}>
-                    Player
-                  </th>
                   {zoneSpans.length > 0 && (
                     <th
                       colSpan={zoneSpans.length}
-                      style={{ ...styles.th, padding: "8px 3px" }}
+                      style={{
+                        ...styles.th,
+                        position: "sticky",
+                        left: rankStickyWidth,
+                        zIndex: 3,
+                        background: "#1C2128",
+                        padding: "8px 3px",
+                      }}
                       title="Target zones from your active strategy — one bracket per slot at this position"
                     >
                       Plan
                     </th>
                   )}
+                  <th style={{ ...styles.th, ...styles.thSticky2, left: playerStickyLeft }}>Player</th>
                   <th
                     style={{ ...styles.th, cursor: "pointer", color: sortKey === "pos" ? "#EDEEF0" : "#8B92A0" }}
                     onClick={() => setSortKey("pos")}
@@ -845,9 +858,11 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
                                   padding: 0,
                                   border: "none",
                                   background: "#171A20",
-                                  width: 17,
-                                  minWidth: 17,
-                                  position: "relative",
+                                  width: ZONE_WIDTH,
+                                  minWidth: ZONE_WIDTH,
+                                  position: "sticky",
+                                  left: rankStickyWidth + zi * ZONE_WIDTH,
+                                  zIndex: 2,
                                 }}
                               >
                                 {within && (
@@ -900,6 +915,7 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
                           row={row}
                           tierBreak={tierBreak}
                           zoneCells={zoneCells}
+                          playerStickyLeft={playerStickyLeft}
                           isTarget={strategyTargets.targetIds.has(row.id)}
                           dragEnabled={boardDragEnabled}
                           dragging={boardDrag?.id === row.id}

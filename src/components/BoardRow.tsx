@@ -14,9 +14,12 @@ interface BoardRowProps {
   dragging: boolean; // this row is being dragged
   dropEdge: React.CSSProperties; // insertion edge when this row is the drop target
   onDragStart: (e: React.PointerEvent) => void;
-  // Extra cells appended after the base columns — the strategy target-zone
-  // bracket columns when a single position filter is active.
+  // Strategy target-zone bracket columns (Plan), rendered pinned between Rank
+  // and Player when a single position filter is active.
   zoneCells?: React.ReactNode;
+  // How far right the Player column's sticky offset must sit to clear the Rank
+  // column plus however many Plan zone columns precede it (0 when there are none).
+  playerStickyLeft: number;
   onPaid: (row: BoardRowType, value: string) => void;
   onMeta: (id: string, field: "max", value: string) => void;
   onRate: (row: BoardRowType, value: Interest) => void;
@@ -31,6 +34,7 @@ export function BoardRow({
   dropEdge,
   onDragStart,
   zoneCells,
+  playerStickyLeft,
   onPaid,
   onMeta,
   onRate,
@@ -53,8 +57,8 @@ export function BoardRow({
     ? "rgba(76, 175, 107, 0.14)"
     : null;
   const bgStyle = rowTint ? { background: rowTint } : {};
-  // The two left columns are sticky, so scrolling cells slide under them. Their
-  // tint must be opaque or the text below bleeds through — composite the same
+  // Rank and Player are sticky, so scrolling cells slide under them. Their tint
+  // must be opaque or the text below bleeds through — composite the same
   // translucent tint over the solid row background instead of letting it show
   // through. (#171A20 matches styles.td / tdSticky.)
   const stickyBg = rowTint ? { background: `linear-gradient(${rowTint}, ${rowTint}), #171A20` } : {};
@@ -82,7 +86,6 @@ export function BoardRow({
   }
 
   const dragCol1 = dragEnabled ? styles.stickyDragCol1 : {};
-  const dragCol2 = dragEnabled ? styles.stickyDragCol2 : {};
 
   return (
     <tr data-dragid={row.id} style={{ opacity: dragging ? 0.35 : dimmed ? 0.4 : 1 }}>
@@ -95,7 +98,8 @@ export function BoardRow({
           </span>
         </span>
       </td>
-      <td style={{ ...styles.td, ...styles.tdSticky2, ...dragCol2, ...tBreakStyle, ...stickyBg }}>
+      {zoneCells}
+      <td style={{ ...styles.td, ...styles.tdSticky2, ...tBreakStyle, ...stickyBg, left: playerStickyLeft }}>
         {nameClickable ? (
           <div
             {...handlers}
@@ -128,7 +132,6 @@ export function BoardRow({
           </>
         )}
       </td>
-      {zoneCells}
       <td style={{ ...styles.td, ...tBreakStyle, ...bgStyle }}>
         <span style={{ ...styles.posTagSm, background: POS_COLOR[row.pos] }}>{row.pos}</span>
       </td>
