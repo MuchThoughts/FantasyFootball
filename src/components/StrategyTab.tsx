@@ -27,6 +27,7 @@ interface StrategyTabProps {
   onName: (strategyId: string, name: string) => void;
   onAdd: () => void;
   onDelete: (id: string) => void;
+  onReset: (id: string) => void;
   onRate: (row: BoardRow, value: Interest) => void;
   // Keeper management reuses the app's global keeper machinery (same as the
   // Board's status dropdown), so keepers set here also show on the Board.
@@ -79,6 +80,7 @@ export function StrategyTab({
   onName,
   onAdd,
   onDelete,
+  onReset,
   onRate,
   onStatus,
   onKeeperCost,
@@ -390,10 +392,17 @@ export function StrategyTab({
           bars sit.
         </div>
 
-        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginTop: 12 }}>
+          <button style={{ ...styles.smallBtn, width: "auto" }} onClick={() => onReset(active.id)}>
+            Reset ratings &amp; prices
+          </button>
           <button style={{ ...styles.dangerBtn, width: "auto" }} onClick={() => onDelete(active.id)}>
             Delete strategy
           </button>
+        </div>
+        <div style={{ fontSize: 10, color: "#5B6270", marginTop: 6, textAlign: "left" }}>
+          Reset clears this strategy&apos;s Like/Dislike marks and restores its slot prices to the defaults. Your
+          keepers are unaffected.
         </div>
       </div>
     </div>

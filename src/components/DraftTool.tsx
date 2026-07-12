@@ -595,6 +595,30 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
     [update]
   );
 
+  // Reset one strategy back to a clean slate: clear its like/dislike ratings and
+  // restore its slot prices (a preset returns to its shipped slots; a custom one
+  // re-derives amounts from the market curve). Keepers are global, so untouched.
+  // Also clears manual tier bars so the board's tiers re-derive from the reset
+  // prices, matching the behavior when you switch strategies.
+  const resetStrategy = useCallback(
+    (id: string) => {
+      if (!window.confirm("Reset this strategy's like/dislike ratings and slot prices? Keepers are unaffected.")) return;
+      update((prev) => {
+        const preset = DEFAULT_STRATEGIES.find((s) => s.id === id);
+        const strategies = prev.strategies.map((s) => {
+          if (s.id !== id) return s;
+          if (preset) return { ...s, slots: preset.slots.map((sl) => ({ ...sl })) };
+          return { ...s, slots: s.slots.map((sl, i) => ({ ...sl, amount: suggestSlotAmount(s.slots, i, sl.pos) })) };
+        });
+        const interestByStrategy = { ...prev.interestByStrategy };
+        delete interestByStrategy[id];
+        const tierOverrides = prev.activeStrategyId === id ? {} : prev.tierOverrides;
+        return { ...prev, strategies, interestByStrategy, tierOverrides };
+      });
+    },
+    [update]
+  );
+
   if (!loaded) {
     return (
       <div style={styles.loadingScreen}>
@@ -798,7 +822,7 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
             <div style={{ fontSize: 11, color: "#8B92A0", marginBottom: 10 }}>
               Drag a tier bar to move players between tiers, or use the ✕ on a bar to remove it.
               {zoneSpans.length > 0 &&
-                ` Brackets on the right mark your strategy's target range for each ${posFilter} slot.`}
+                ` Brackets on the left mark your strategy's target range for each ${posFilter} slot.`}
             </div>
           )}
 
@@ -821,6 +845,15 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
                   <th style={{ ...styles.th, ...styles.thSticky2, ...(boardDragEnabled ? styles.stickyDragCol2 : {}) }}>
                     Player
                   </th>
+                  {zoneSpans.length > 0 && (
+                    <th
+                      colSpan={zoneSpans.length}
+                      style={{ ...styles.th, padding: "8px 3px" }}
+                      title="Target zones from your active strategy — one bracket per slot at this position"
+                    >
+                      Plan
+                    </th>
+                  )}
                   <th
                     style={{ ...styles.th, cursor: "pointer", color: sortKey === "pos" ? "#EDEEF0" : "#8B92A0" }}
                     onClick={() => setSortKey("pos")}
@@ -847,15 +880,6 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
                   </th>
                   <th style={styles.th}>Max</th>
                   <th style={styles.th}>Paid</th>
-                  {zoneSpans.length > 0 && (
-                    <th
-                      colSpan={zoneSpans.length}
-                      style={{ ...styles.th, padding: "8px 3px" }}
-                      title="Target zones from your active strategy — one bracket per slot at this position"
-                    >
-                      Plan
-                    </th>
-                  )}
                 </tr>
               </thead>
               <tbody>
@@ -980,6 +1004,7 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
           onName={setStrategyName}
           onAdd={addStrategy}
           onDelete={deleteStrategy}
+          onReset={resetStrategy}
           onRate={setInterest}
           onStatus={setStatus}
           onKeeperCost={setKeeperCost}

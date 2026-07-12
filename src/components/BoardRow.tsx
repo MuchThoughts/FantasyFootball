@@ -127,6 +127,7 @@ export function BoardRow({
           </>
         )}
       </td>
+      {zoneCells}
       <td style={{ ...styles.td, ...tBreakStyle, ...bgStyle }}>
         <span style={{ ...styles.posTagSm, background: POS_COLOR[row.pos] }}>{row.pos}</span>
       </td>
@@ -174,7 +175,6 @@ export function BoardRow({
           />
         )}
       </td>
-      {zoneCells}
     </tr>
   );
 }
