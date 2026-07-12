@@ -160,10 +160,12 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
     [d.settings, keepers, d.drafted, allPlayers, d.playerMeta, d.tierOverrides, activeStrategy, activeInterest]
   );
 
-  // Stable nobody-kept market price per player, so the Insights keeper tables can
-  // show each candidate's projected price (and EV vs keeper cost) even after the
-  // player is checked and leaves the live board.
-  const targetByUid = useMemo(() => marketTargets(allPlayers), [allPlayers]);
+  // Open-market price per player — the league's 3-yr price at each player's TRUE
+  // 2026 positional rank, ignoring who's checked as a keeper. Deliberately not
+  // the Board's live Tgt (which recomputes ranks after removing kept players and
+  // therefore drifts as more get checked) — this stays stable and gives every
+  // Insights keeper candidate a price, including ones currently checked.
+  const marketByUid = useMemo(() => marketTargets(allPlayers), [allPlayers]);
 
   const strategySlots = useMemo(() => computeStrategySlots(activeStrategy), [activeStrategy]);
   const strategyTargets = useMemo(() => computeStrategyTargets(board, strategySlots), [board, strategySlots]);
@@ -981,7 +983,7 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
       )}
 
       {tab === "drafters" && (
-        <InsightsTab keeperPicks={d.keeperPicks} targetByUid={targetByUid} onToggleKeeper={setKeeperPick} />
+        <InsightsTab keeperPicks={d.keeperPicks} marketByUid={marketByUid} onToggleKeeper={setKeeperPick} />
       )}
 
       {tab === "offenses" && <OffensesTab rows={offenseRows} sort={offSort} setSort={setOffSort} />}

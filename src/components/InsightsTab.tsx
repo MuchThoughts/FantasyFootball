@@ -7,12 +7,13 @@ import { styles } from "./styles";
 interface InsightsTabProps {
   // Per-player override map: uid -> expected-keeper boolean. Absent = use default.
   keeperPicks: Record<string, boolean>;
-  // Auction target price per player uid, from the board (drives EV = target − cost).
-  targetByUid: Map<string, number>;
+  // Open-market price per player uid (league's 3-yr price at their true 2026
+  // positional rank, ignoring keepers) — drives EV = market − keeper cost.
+  marketByUid: Map<string, number>;
   onToggleKeeper: (playerUid: string, next: boolean) => void;
 }
 
-export function InsightsTab({ keeperPicks, targetByUid, onToggleKeeper }: InsightsTabProps) {
+export function InsightsTab({ keeperPicks, marketByUid, onToggleKeeper }: InsightsTabProps) {
   return (
     <div>
       <CheckedKeepers keeperPicks={keeperPicks} />
@@ -20,14 +21,17 @@ export function InsightsTab({ keeperPicks, targetByUid, onToggleKeeper }: Insigh
         Built from your league&apos;s 2023–2025 auction results and the official keeper sheet. Keeper costs shown
         are 2026 prices (last salary + $5, undrafted = $10); a player can only be kept two years running. Keeper
         values are judged against current 2026 rankings — target is your league&apos;s 3-yr price at the
-        player&apos;s 2026 positional rank, so trades, injuries, and role changes are priced in. The checkboxes ARE
-        the keeper designation: checked players come off the board (tinted orange), their cost is committed against
-        the auction pool, and your own checks fill your strategy slots.
+        player&apos;s true 2026 positional rank — e.g. if he&apos;s the RB10, it&apos;s what your league&apos;s RB10
+        has actually sold for — so trades, injuries, and role changes are priced in. This is deliberately different
+        from the Board&apos;s live Tgt column, which recomputes ranks after removing whoever&apos;s already checked
+        as kept, so it drifts as you check more players. The checkboxes ARE the keeper designation: checked players
+        come off the board (tinted orange), their cost is committed against the auction pool, and your own checks
+        fill your strategy slots.
       </div>
       <LeagueBaseline />
       <div style={styles.list}>
         {OWNER_INSIGHTS.map((d) => (
-          <InsightCard key={d.owner} d={d} keeperPicks={keeperPicks} targetByUid={targetByUid} onToggleKeeper={onToggleKeeper} />
+          <InsightCard key={d.owner} d={d} keeperPicks={keeperPicks} marketByUid={marketByUid} onToggleKeeper={onToggleKeeper} />
         ))}
       </div>
     </div>
@@ -117,23 +121,23 @@ function StatTile({ label, value, hint }: { label: string; value: string; hint?:
 function InsightCard({
   d,
   keeperPicks,
-  targetByUid,
+  marketByUid,
   onToggleKeeper,
 }: {
   d: OwnerInsight;
   keeperPicks: Record<string, boolean>;
-  targetByUid: Map<string, number>;
+  marketByUid: Map<string, number>;
   onToggleKeeper: (playerUid: string, next: boolean) => void;
 }) {
   const isSean = d.owner === "Sean";
 
-  // Rank this owner's keeper options by expected value (target − keeper cost) and
-  // show the best 4; that's where their two keeps almost certainly come from.
+  // Rank this owner's keeper options by expected value (market − keeper cost)
+  // and show the best 4; that's where their two keeps almost certainly come from.
   const ranked = d.keeperOptions
     .map((k) => {
       const id = uid(k.player);
-      const target = targetByUid.get(id) ?? null;
-      return { ...k, id, target, ev: target != null ? target - k.cost : null };
+      const market = marketByUid.get(id) ?? null;
+      return { ...k, id, market, ev: market != null ? market - k.cost : null };
     })
     .sort((a, b) => (b.ev ?? -Infinity) - (a.ev ?? -Infinity));
   const topKeepers = ranked.slice(0, 4);
@@ -224,8 +228,10 @@ function InsightCard({
             </span>
           </div>
           <div style={{ fontSize: 10, color: "#5B6270", marginBottom: 6 }}>
-            Top 4 by value (target − keeper cost). Check the two you expect {isSean ? "to keep" : `${d.owner} to keep`}{" "}
-            — checked players are treated as kept: off the board and their cost pre-committed.
+            Top 4 by value (market − keeper cost), where market is the open-market price for this player&apos;s true
+            2026 rank — not the Board&apos;s live Tgt (see the Market column&apos;s tooltip). Check the two you expect{" "}
+            {isSean ? "to keep" : `${d.owner} to keep`} — checked players are treated as kept: off the board and
+            their cost pre-committed.
           </div>
 
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
@@ -234,7 +240,12 @@ function InsightCard({
                 <th style={{ width: 22 }} />
                 <th style={{ textAlign: "left", fontWeight: 500, paddingBottom: 3 }}>Player</th>
                 <th style={{ fontWeight: 500, paddingBottom: 3 }}>Keeper</th>
-                <th style={{ fontWeight: 500, paddingBottom: 3 }}>Target</th>
+                <th
+                  style={{ fontWeight: 500, paddingBottom: 3, cursor: "help" }}
+                  title="Open-market price: your league's 3-yr price at this player's true 2026 positional rank (e.g. the RB10 costs what your league's RB10 has sold for) — NOT the Board's live Tgt, which shifts once keepers start coming off the pool."
+                >
+                  Market
+                </th>
                 <th style={{ fontWeight: 500, paddingBottom: 3, paddingLeft: 8 }}>Value</th>
               </tr>
             </thead>
@@ -277,7 +288,7 @@ function InsightCard({
                       ${k.cost}
                     </td>
                     <td style={{ textAlign: "right", fontFamily: "'IBM Plex Mono', monospace", color: "#C6CAD2" }}>
-                      {k.target != null ? `$${k.target}` : "—"}
+                      {k.market != null ? `$${k.market}` : "—"}
                     </td>
                     <td
                       style={{
