@@ -847,7 +847,6 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
                   </th>
                   <th style={styles.th}>Max</th>
                   <th style={styles.th}>Paid</th>
-                  <th style={styles.th}>Status</th>
                   {zoneSpans.length > 0 && (
                     <th
                       colSpan={zoneSpans.length}
@@ -942,14 +941,12 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
                           onDragStart={startBoardDrag(row.id)}
                           onPaid={setPaid}
                           onMeta={setMeta}
-                          onStatus={setStatus}
                           onRate={setInterest}
-                          onKeeperCost={setKeeperCost}
                         />
                         {breakIndex !== -1 && (
                           <TierDivider
                             pos={posFilter}
-                            colSpan={9 + zoneSpans.length}
+                            colSpan={8 + zoneSpans.length}
                             index={breakIndex}
                             rank={breaks[breakIndex]}
                             lower={breakIndex > 0 ? breaks[breakIndex - 1] + 1 : 1}

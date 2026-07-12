@@ -1,6 +1,6 @@
 "use client";
 
-import { BoardRow as BoardRowType, Interest, POS_COLOR, STATUS_OPTIONS, tierColor } from "@/lib/draftLogic";
+import { BoardRow as BoardRowType, Interest, POS_COLOR, tierColor } from "@/lib/draftLogic";
 import { usePlayerRating } from "@/hooks/usePlayerRating";
 import { DragHandle } from "./DragHandle";
 import { styles } from "./styles";
@@ -19,9 +19,7 @@ interface BoardRowProps {
   zoneCells?: React.ReactNode;
   onPaid: (row: BoardRowType, value: string) => void;
   onMeta: (id: string, field: "max", value: string) => void;
-  onStatus: (row: BoardRowType, value: string) => void;
   onRate: (row: BoardRowType, value: Interest) => void;
-  onKeeperCost: (row: BoardRowType, value: string) => void;
 }
 
 export function BoardRow({
@@ -35,22 +33,10 @@ export function BoardRow({
   zoneCells,
   onPaid,
   onMeta,
-  onStatus,
   onRate,
-  onKeeperCost,
 }: BoardRowProps) {
   const { pressing, handlers } = usePlayerRating(row.interest, (v) => onRate(row, v));
   const nameClickable = !row.isKeeper && !row.isDrafted && !row.mine;
-  const statusValue = row.isKeeper
-    ? row.mine
-      ? "keeper-mine"
-      : "keeper"
-    : row.mine
-    ? "mine"
-    : row.interest === "love" || row.interest === "like" || row.interest === "dislike"
-    ? row.interest
-    : "";
-  const statusOpt = STATUS_OPTIONS.find((o) => o.value === statusValue) || STATUS_OPTIONS[0];
   const dimmed = row.isDrafted || row.isKeeper || row.interest === "dislike";
   // Drop-target edge wins over a tier break line while a drag is in flight.
   const tBreakStyle = { ...(tierBreak ? { borderTop: `2px solid ${tierColor(row.tier)}` } : {}), ...dropEdge };
@@ -182,31 +168,6 @@ export function BoardRow({
             onChange={(e) => onPaid(row, e.target.value)}
           />
         )}
-      </td>
-      <td style={{ ...styles.td, ...tBreakStyle, ...bgStyle }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-          <select
-            style={{ ...styles.cellSelect, width: 78, background: statusOpt.color, color: statusOpt.text }}
-            value={statusValue}
-            onChange={(e) => onStatus(row, e.target.value)}
-            title={statusOpt.label}
-          >
-            {STATUS_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value} style={{ background: "#1C2128", color: "#EDEEF0" }}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-          {row.isKeeper && (
-            <input
-              style={{ ...styles.cellInput, width: 32 }}
-              type="number"
-              placeholder="$"
-              value={row.keeperCost}
-              onChange={(e) => onKeeperCost(row, e.target.value)}
-            />
-          )}
-        </div>
       </td>
       {zoneCells}
     </tr>

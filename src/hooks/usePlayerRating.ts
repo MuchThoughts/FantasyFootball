@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { Interest } from "@/lib/draftLogic";
 
-const LONG_PRESS_MS = 550;
+const LONG_PRESS_MS = 1650;
 const CLICK_DELAY_MS = 260; // window to distinguish a single click from a double
 
 // Shared pointer-interaction logic for rating a player by clicking their name:
