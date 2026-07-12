@@ -129,13 +129,16 @@ export function StrategyTab({
     posTotals[sl.pos] = (posTotals[sl.pos] || 0) + slotAmount(sl);
   });
 
-  // Excludes drafted/kept/disliked players so the list always shows live, real
-  // candidates — disliking one here removes it and lets the next-closest backfill.
+  // Excludes drafted/kept/predicted-keeper/disliked players so the list always
+  // shows live, auction-available candidates — disliking one here removes it and
+  // lets the next-closest backfill.
   const byPos = useMemo(() => {
     const m: Record<string, BoardRow[]> = {};
     POSITIONS.forEach((p) => {
       m[p] = boardRows
-        .filter((r) => r.pos === p && r.target != null && !r.isDrafted && !r.isKeeper && r.interest !== "dislike")
+        .filter(
+          (r) => r.pos === p && r.target != null && !r.isDrafted && !r.isKeeper && !r.likelyKeeper && r.interest !== "dislike"
+        )
         .sort((a, b) => (a.target as number) - (b.target as number));
     });
     return m;

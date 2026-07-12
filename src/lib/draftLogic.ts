@@ -465,8 +465,10 @@ export function computeStrategyZones(rows: BoardRow[], strategy: Strategy | unde
     strategy,
     rows.filter((r) => r.isKeeper && r.mine)
   );
+  // Predicted keepers (likelyKeeper) won't reach the auction, so they're not
+  // valid slot targets even though they aren't formally kept yet.
   const candidates = rows.filter(
-    (r) => r.pos === pos && r.target != null && !r.isDrafted && !r.isKeeper && r.interest !== "dislike"
+    (r) => r.pos === pos && r.target != null && !r.isDrafted && !r.isKeeper && !r.likelyKeeper && r.interest !== "dislike"
   );
   return strategy.slots
     .filter((sl) => sl.pos === pos && !keeperSlots.has(sl.id) && (Number(sl.amount) || 0) > 0)
@@ -689,7 +691,7 @@ export function computeStrategyTargets(board: Board, strategySlots: Record<Pos, 
       board.myDrafted.filter((r) => r.pos === pos).length + board.myKeepers.filter((k) => k.pos === pos).length;
     const need = Math.max((strategySlots[pos] || 0) - filledMine, 0);
     const avail = board.rows
-      .filter((r) => r.pos === pos && !r.isDrafted && !r.isKeeper)
+      .filter((r) => r.pos === pos && !r.isDrafted && !r.isKeeper && !r.likelyKeeper)
       .sort((a, b) => (a.effRank as number) - (b.effRank as number));
     const picked = avail.slice(0, need);
     picked.forEach((r) => targetIds.add(r.id));
