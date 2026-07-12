@@ -14,6 +14,9 @@ interface BoardRowProps {
   dragging: boolean; // this row is being dragged
   dropEdge: React.CSSProperties; // insertion edge when this row is the drop target
   onDragStart: (e: React.PointerEvent) => void;
+  // Extra cells appended after the base columns — the strategy target-zone
+  // bracket columns when a single position filter is active.
+  zoneCells?: React.ReactNode;
   onPaid: (row: BoardRowType, value: string) => void;
   onMeta: (id: string, field: "max", value: string) => void;
   onStatus: (row: BoardRowType, value: string) => void;
@@ -29,6 +32,7 @@ export function BoardRow({
   dragging,
   dropEdge,
   onDragStart,
+  zoneCells,
   onPaid,
   onMeta,
   onStatus,
@@ -185,6 +189,7 @@ export function BoardRow({
           )}
         </div>
       </td>
+      {zoneCells}
     </tr>
   );
 }

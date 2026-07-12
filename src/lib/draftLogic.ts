@@ -352,6 +352,79 @@ export function computeStrategySlots(strategy: Strategy | undefined): Record<Pos
   return slots;
 }
 
+// Assign each of "my" keepers to the strategy slot at its position whose planned
+// target price is closest to the keeper's cost — so a keeper priced like an RB2/RB3
+// fills that slot rather than always landing in RB1. Greedy closest-pair-first;
+// ties favor the earlier (pricier) slot. Shared by the Strategy tab's slot table
+// and the Board's target-zone brackets so both agree on which slots are filled.
+export function assignKeepersToSlots(strategy: Strategy | undefined, myKeepers: BoardRow[]): Map<string, BoardRow> {
+  const map = new Map<string, BoardRow>();
+  if (!strategy) return map;
+
+  const slotsByPos: Record<string, { id: string; amount: number }[]> = {};
+  strategy.slots.forEach((sl) => {
+    (slotsByPos[sl.pos] = slotsByPos[sl.pos] || []).push({ id: sl.id, amount: Number(sl.amount) || 0 });
+  });
+  const keepersByPos: Record<string, BoardRow[]> = {};
+  myKeepers.forEach((k) => {
+    (keepersByPos[k.pos] = keepersByPos[k.pos] || []).push(k);
+  });
+
+  Object.entries(keepersByPos).forEach(([pos, keepers]) => {
+    const slots = slotsByPos[pos] || [];
+    // Every keeper/slot pairing, ranked by how close the keeper's cost is to
+    // the slot's target price; greedily take the closest pair first so each
+    // keeper lands in its best-fitting open slot.
+    const pairs: { ki: number; si: number; diff: number }[] = [];
+    keepers.forEach((k, ki) => {
+      const cost = Number(k.keeperCost) || 0;
+      slots.forEach((s, si) => pairs.push({ ki, si, diff: Math.abs(s.amount - cost) }));
+    });
+    pairs.sort((a, b) => a.diff - b.diff);
+    const usedK = new Set<number>();
+    const usedS = new Set<number>();
+    pairs.forEach(({ ki, si }) => {
+      if (usedK.has(ki) || usedS.has(si)) return;
+      usedK.add(ki);
+      usedS.add(si);
+      map.set(slots[si].id, keepers[ki]);
+    });
+  });
+  return map;
+}
+
+export interface StrategyZone {
+  slotId: string;
+  label: string; // slot role, e.g. "RB2", "FLEX 1", "Bench 3"
+  amount: number; // the slot's planned $
+  ids: string[]; // the ~5 available players priced nearest that $
+}
+
+// The Strategy tab's per-slot target lists (the 5 available players priced nearest
+// each slot's planned $) for one position — exposed so the Board can bracket those
+// ranges alongside the table. Keeper-filled and $0 slots produce no zone.
+export function computeStrategyZones(rows: BoardRow[], strategy: Strategy | undefined, pos: string): StrategyZone[] {
+  if (!strategy) return [];
+  const keeperSlots = assignKeepersToSlots(
+    strategy,
+    rows.filter((r) => r.isKeeper && r.mine)
+  );
+  const candidates = rows.filter(
+    (r) => r.pos === pos && r.target != null && !r.isDrafted && !r.isKeeper && r.interest !== "dislike"
+  );
+  return strategy.slots
+    .filter((sl) => sl.pos === pos && !keeperSlots.has(sl.id) && (Number(sl.amount) || 0) > 0)
+    .map((sl) => {
+      const amt = Number(sl.amount) || 0;
+      const ids = [...candidates]
+        .sort((a, b) => Math.abs((a.target as number) - amt) - Math.abs((b.target as number) - amt))
+        .slice(0, 5)
+        .map((r) => r.id);
+      return { slotId: sl.id, label: slotLabel(sl.id), amount: amt, ids };
+    })
+    .filter((z) => z.ids.length > 0);
+}
+
 export interface StrategyTargets {
   targetIds: Set<string>;
   sums: Record<string, number>;

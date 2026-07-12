@@ -12,9 +12,11 @@ import {
   computeMarketRead,
   computeStrategySlots,
   computeStrategyTargets,
+  computeStrategyZones,
   fmtMoney,
   POSITIONS,
   recommendStrategy,
+  StrategyZone,
   suggestSlotAmount,
   tierColor,
   uid,
@@ -211,6 +213,23 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
   // true only when a single real position is selected (not ALL or the Liked filter) —
   // tier bars are per-position, so their controls only apply in that case.
   const isPosFilter = (POSITIONS as string[]).includes(posFilter);
+
+  // Target-zone brackets: with a single position filtered, mark where the active
+  // strategy's slot targets (the ~5 players priced nearest each slot's planned $)
+  // sit among the visible rows. Each zone becomes a bracket column to the right of
+  // the table, spanning from its highest-ranked target to its lowest. Hidden on
+  // ALL/Liked and in endgame mode.
+  const zoneSpans = useMemo(() => {
+    if (!isPosFilter || endgameMode) return [];
+    const zones = computeStrategyZones(board.rows, activeStrategy, posFilter);
+    const indexById = new Map(filteredRows.map((r, i) => [r.id, i] as const));
+    const spans: (StrategyZone & { start: number; end: number })[] = [];
+    for (const z of zones) {
+      const idxs = z.ids.map((id) => indexById.get(id)).filter((i): i is number => i !== undefined);
+      if (idxs.length > 0) spans.push({ ...z, start: Math.min(...idxs), end: Math.max(...idxs) });
+    }
+    return spans;
+  }, [isPosFilter, endgameMode, board.rows, activeStrategy, posFilter, filteredRows]);
 
   const setPaid = useCallback(
     (row: BoardRowType, value: string) => {
@@ -741,6 +760,8 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
           {isPosFilter && (
             <div style={{ fontSize: 11, color: "#8B92A0", marginBottom: 10 }}>
               Drag a tier bar to move players between tiers, or use the ✕ on a bar to remove it.
+              {zoneSpans.length > 0 &&
+                ` Brackets on the right mark your strategy's target range for each ${posFilter} slot.`}
             </div>
           )}
 
@@ -790,6 +811,15 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
                   <th style={styles.th}>Max</th>
                   <th style={styles.th}>Paid</th>
                   <th style={styles.th}>Status</th>
+                  {zoneSpans.length > 0 && (
+                    <th
+                      colSpan={zoneSpans.length}
+                      style={{ ...styles.th, padding: "8px 3px" }}
+                      title="Target zones from your active strategy — one bracket per slot at this position"
+                    >
+                      Plan
+                    </th>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -800,11 +830,74 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
                     const prevRow = filteredRows[idx - 1];
                     const tierBreak = !!prevRow && prevRow.pos === row.pos && prevRow.tier !== row.tier && row.tier != null;
                     const breakIndex = isPosFilter && !row.isKeeper ? breaks.indexOf(row.effRank as number) : -1;
+                    const zoneCells =
+                      zoneSpans.length > 0
+                        ? zoneSpans.map((z, zi) => {
+                            const color = tierColor(zi + 1);
+                            const within = idx >= z.start && idx <= z.end;
+                            const isMid = idx === Math.floor((z.start + z.end) / 2);
+                            return (
+                              <td
+                                key={z.slotId}
+                                style={{
+                                  padding: 0,
+                                  border: "none",
+                                  background: "#171A20",
+                                  width: 17,
+                                  minWidth: 17,
+                                  position: "relative",
+                                }}
+                              >
+                                {within && (
+                                  <div
+                                    style={{
+                                      position: "absolute",
+                                      top: idx === z.start ? 4 : 0,
+                                      bottom: idx === z.end ? 4 : 0,
+                                      left: 3,
+                                      right: 8,
+                                      borderRight: `2px solid ${color}`,
+                                      borderTop: idx === z.start ? `2px solid ${color}` : "none",
+                                      borderBottom: idx === z.end ? `2px solid ${color}` : "none",
+                                      borderTopRightRadius: idx === z.start ? 5 : 0,
+                                      borderBottomRightRadius: idx === z.end ? 5 : 0,
+                                    }}
+                                  />
+                                )}
+                                {within && isMid && (
+                                  <div
+                                    style={{
+                                      position: "absolute",
+                                      top: "50%",
+                                      left: "50%",
+                                      transform: "translate(-50%, -50%)",
+                                      writingMode: "vertical-rl",
+                                      fontFamily: "'IBM Plex Mono', monospace",
+                                      fontSize: 9,
+                                      fontWeight: 700,
+                                      letterSpacing: "0.06em",
+                                      textTransform: "uppercase",
+                                      whiteSpace: "nowrap",
+                                      color,
+                                      background: "#171A20",
+                                      padding: "3px 0",
+                                      zIndex: 1,
+                                    }}
+                                    title={`${z.label} target zone — 5 players nearest the planned $${z.amount}`}
+                                  >
+                                    {z.label} ${z.amount}
+                                  </div>
+                                )}
+                              </td>
+                            );
+                          })
+                        : undefined;
                     return (
                       <Fragment key={row.id}>
                         <BoardRow
                           row={row}
                           tierBreak={tierBreak}
+                          zoneCells={zoneCells}
                           isTarget={strategyTargets.targetIds.has(row.id)}
                           dragEnabled={boardDragEnabled}
                           dragging={boardDrag?.id === row.id}
@@ -819,6 +912,7 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
                         {breakIndex !== -1 && (
                           <TierDivider
                             pos={posFilter}
+                            colSpan={9 + zoneSpans.length}
                             index={breakIndex}
                             rank={breaks[breakIndex]}
                             lower={breakIndex > 0 ? breaks[breakIndex - 1] + 1 : 1}
