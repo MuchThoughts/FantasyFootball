@@ -137,13 +137,20 @@ export interface ParsedRanking {
   unmatched: string[]; // names we couldn't match to a player on the board
 }
 
+// Known alternate spellings (normalized) -> the board's normalized spelling.
+const NAME_ALIASES: Record<string, string> = {
+  kennygainwell: "kennethgainwell",
+  jonathonbrooks: "jonathanbrooks",
+};
+
 // Aggressive name normalization for matching uploads to board players:
-// lowercase, strip punctuation, drop generational suffixes.
+// lowercase, strip punctuation, drop generational suffixes, map known aliases.
 function normalizeName(name: string): string {
-  return name
+  const n = name
     .toLowerCase()
     .replace(/\b(jr|sr|ii|iii|iv|v)\b\.?$/g, "")
     .replace(/[^a-z0-9]/g, "");
+  return NAME_ALIASES[n] ?? n;
 }
 
 // Split one CSV/TSV line into cells, honoring double quotes.
