@@ -1,7 +1,7 @@
 "use client";
 
 import { LEAGUE_AVG, OWNER_INSIGHTS, OwnerInsight } from "@/lib/data/drafters";
-import { isExpectedKeeper, POS_COLOR, POSITIONS, uid } from "@/lib/draftLogic";
+import { isExpectedKeeper, KEEPER_CANDIDATES, POS_COLOR, POSITIONS, uid } from "@/lib/draftLogic";
 import { styles } from "./styles";
 
 interface InsightsTabProps {
@@ -15,6 +15,7 @@ interface InsightsTabProps {
 export function InsightsTab({ keeperPicks, targetByUid, onToggleKeeper }: InsightsTabProps) {
   return (
     <div>
+      <CheckedKeepers keeperPicks={keeperPicks} />
       <div style={styles.emptyState}>
         Built from your league&apos;s 2023–2025 auction results and the official keeper sheet. Keeper costs shown
         are 2026 prices (last salary + $5, undrafted = $10); a player can only be kept two years running. Keeper
@@ -28,6 +29,49 @@ export function InsightsTab({ keeperPicks, targetByUid, onToggleKeeper }: Insigh
           <InsightCard key={d.owner} d={d} keeperPicks={keeperPicks} targetByUid={targetByUid} onToggleKeeper={onToggleKeeper} />
         ))}
       </div>
+    </div>
+  );
+}
+
+// Every keeper you've checked across all owners, grouped by position — a running
+// picture of who's leaving the auction pool (and at what keeper cost, which we
+// already know from the sheet, so nothing here needs to be typed in).
+function CheckedKeepers({ keeperPicks }: { keeperPicks: Record<string, boolean> }) {
+  const picked = KEEPER_CANDIDATES.filter((c) => isExpectedKeeper(c.uid, keeperPicks));
+  const groups = POSITIONS.map((p) => ({ pos: p, list: picked.filter((c) => c.pos === p) })).filter(
+    (g) => g.list.length > 0
+  );
+
+  return (
+    <div style={{ ...styles.playerCard, marginBottom: 6 }}>
+      <div style={{ fontSize: 11, color: "#8B92A0", marginBottom: 6, fontWeight: 600, letterSpacing: 0.4 }}>
+        KEEPERS YOU&apos;VE CHECKED{" "}
+        <span style={{ color: "#5B6270", fontWeight: 400 }}>· {picked.length} across the league</span>
+      </div>
+      {groups.length === 0 ? (
+        <div style={{ fontSize: 12, color: "#5B6270" }}>
+          None yet — check the boxes in each owner&apos;s Keeper Watch below and they&apos;ll collect here.
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {groups.map((g) => (
+            <div key={g.pos} style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
+              <span style={{ ...styles.posTagSm, background: POS_COLOR[g.pos], flexShrink: 0 }}>{g.pos}</span>
+              <span style={{ display: "flex", gap: 12, flexWrap: "wrap", fontSize: 12.5, color: "#EDEEF0" }}>
+                {g.list.map((c) => (
+                  <span key={c.uid}>
+                    {c.player}{" "}
+                    <span style={{ color: "#8B92A0", fontSize: 11 }}>
+                      {c.owner === "Sean" ? "you" : c.owner}{" "}
+                      <span style={{ fontFamily: "'IBM Plex Mono', monospace" }}>${c.cost}</span>
+                    </span>
+                  </span>
+                ))}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

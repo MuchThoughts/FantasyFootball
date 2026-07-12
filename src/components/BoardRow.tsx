@@ -52,6 +52,11 @@ export function BoardRow({
     ? "rgba(76, 175, 107, 0.14)"
     : null;
   const bgStyle = rowTint ? { background: rowTint } : {};
+  // The two left columns are sticky, so scrolling cells slide under them. Their
+  // tint must be opaque or the text below bleeds through — composite the same
+  // translucent tint over the solid row background instead of letting it show
+  // through. (#171A20 matches styles.td / tdSticky.)
+  const stickyBg = rowTint ? { background: `linear-gradient(${rowTint}, ${rowTint}), #171A20` } : {};
   const keeperTag = likelyKeeper && (
     <span
       style={{ color: "#E8A33D" }}
@@ -80,7 +85,7 @@ export function BoardRow({
 
   return (
     <tr data-dragid={row.id} style={{ opacity: dragging ? 0.35 : dimmed ? 0.4 : 1 }}>
-      <td style={{ ...styles.td, ...styles.tdSticky, ...dragCol1, ...tBreakStyle, ...bgStyle, ...targetGlow }}>
+      <td style={{ ...styles.td, ...styles.tdSticky, ...dragCol1, ...tBreakStyle, ...stickyBg, ...targetGlow }}>
         <span style={{ display: "inline-flex", alignItems: "center" }}>
           {dragEnabled && <DragHandle onPointerDown={onDragStart} dragging={dragging} />}
           <span style={{ ...styles.tdMono, fontSize: 11 }}>
@@ -89,7 +94,7 @@ export function BoardRow({
           </span>
         </span>
       </td>
-      <td style={{ ...styles.td, ...styles.tdSticky2, ...dragCol2, ...tBreakStyle, ...bgStyle }}>
+      <td style={{ ...styles.td, ...styles.tdSticky2, ...dragCol2, ...tBreakStyle, ...stickyBg }}>
         {nameClickable ? (
           <div
             {...handlers}
