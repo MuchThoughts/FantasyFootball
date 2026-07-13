@@ -684,10 +684,10 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
 
       {tab === "board" && (
         <>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, maxWidth: "100%" }}>
             <span style={{ fontSize: 11, color: "#8B92A0", flexShrink: 0 }}>Strategy</span>
             <select
-              style={{ ...styles.select, flex: 1 }}
+              style={{ ...styles.select, flex: 1, minWidth: 0 }}
               value={d.activeStrategyId}
               onChange={(e) => selectStrategy(e.target.value)}
             >
@@ -697,9 +697,19 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
                 </option>
               ))}
             </select>
+            {/* Truncate the (often long) ranking name so it can't push the row —
+                and the whole page — wider than the screen. */}
             <button
-              style={{ ...styles.smallBtn, flexShrink: 0 }}
-              title="Active ranking — change on the Rankings tab"
+              style={{
+                ...styles.smallBtn,
+                flex: "0 1 auto",
+                minWidth: 0,
+                maxWidth: 150,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+              title={`Active ranking: ${rankingLabel} — change on the Rankings tab`}
               onClick={() => setTab("rankings")}
             >
               Rks: {rankingLabel}
