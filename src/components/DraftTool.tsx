@@ -39,6 +39,7 @@ import { StrategyAdvisor } from "./StrategyAdvisor";
 import { InsightsTab } from "./InsightsTab";
 import { OffensesTab } from "./OffensesTab";
 import { RawCostsTab } from "./RawCostsTab";
+import { TargetsTab } from "./TargetsTab";
 
 const PROFILE_STORAGE_KEY = "ffauction2026:profileId";
 
@@ -114,7 +115,7 @@ interface DraftToolProps {
 function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: DraftToolProps) {
   const { data, update, loaded, saveState } = useDraftState(profileId);
 
-  const [tab, setTab] = useState<"board" | "strategy" | "rankings" | "drafters" | "offenses" | "rawcosts">("board");
+  const [tab, setTab] = useState<"board" | "targets" | "strategy" | "rankings" | "drafters" | "offenses" | "rawcosts">("board");
   const [posFilter, setPosFilter] = useState("ALL");
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState("adp");
@@ -635,6 +636,9 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
         <button style={tab === "board" ? styles.tabActive : styles.tab} onClick={() => setTab("board")}>
           Board
         </button>
+        <button style={tab === "targets" ? styles.tabActive : styles.tab} onClick={() => setTab("targets")}>
+          Targets
+        </button>
         <button style={tab === "strategy" ? styles.tabActive : styles.tab} onClick={() => setTab("strategy")}>
           Strategy
         </button>
@@ -991,6 +995,10 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
       )}
 
       {tab === "offenses" && <OffensesTab rows={offenseRows} sort={offSort} setSort={setOffSort} />}
+
+      {tab === "targets" && (
+        <TargetsTab board={board} strategy={activeStrategy} onPaid={setPaid} onMeta={setMeta} onRate={setInterest} />
+      )}
 
       {tab === "rawcosts" && <RawCostsTab />}
 
