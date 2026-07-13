@@ -21,6 +21,16 @@ export interface RawCostRow {
   k2023: boolean;
 }
 
+// Simplified (rounded) actual draft cost for a positional rank — what the
+// league has historically paid for the Nth-priciest player at that position.
+export function rawCostAt(pos: string, rank: number | null | undefined): number | null {
+  if (rank == null) return null;
+  const rows = RAW_DRAFT_COSTS[pos];
+  if (!rows || rows.length === 0) return null;
+  const row = rows.find((r) => r.rank === rank) ?? rows[rows.length - 1];
+  return Math.round(row.price);
+}
+
 export const RAW_DRAFT_COSTS: Record<string, RawCostRow[]> = {
   QB: [
     { rank: 1, price: 61.85, method: "weighted", y2025: 62, y2024: 62, y2023: 59, k2025: false, k2024: false, k2023: false },

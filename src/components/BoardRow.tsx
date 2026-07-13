@@ -21,6 +21,12 @@ interface BoardRowProps {
   // How far right the Player column's sticky offset must sit to clear the Rank
   // column plus however many Plan zone columns precede it (0 when there are none).
   playerStickyLeft: number;
+  // Column toggles (Board shows all; Targets hides Pos/Paid and adds Act).
+  showPos?: boolean; // default true
+  showPaid?: boolean; // default true
+  // When defined, render an "Act" cell (actual historical draft cost for this
+  // pos+rank) just left of Tgt. undefined = no Act column at all.
+  actCost?: number | null;
   onPaid: (row: BoardRowType, value: string) => void;
   onMeta: (id: string, field: "max", value: string) => void;
   onRate: (row: BoardRowType, value: Interest) => void;
@@ -36,6 +42,9 @@ export function BoardRow({
   onDragStart,
   zoneCells,
   playerStickyLeft,
+  showPos = true,
+  showPaid = true,
+  actCost,
   onPaid,
   onMeta,
   onRate,
@@ -130,27 +139,35 @@ export function BoardRow({
               touchAction: "manipulation",
             }}
           >
-            <div style={styles.tdPlayerName}>{row.name}</div>
+            <div style={styles.tdPlayerName}>
+              {row.name}
+              {row.team && <span style={{ color: "#7A828F", fontWeight: 400, fontSize: 11 }}> {row.team}</span>}
+            </div>
             <div style={styles.tdPlayerMeta}>
-              {row.team ? row.team + " · " : ""}ADP {row.adp}
+              ADP {row.adp}
               {keeperTag}
               {lastDraftTag}
             </div>
           </div>
         ) : (
           <>
-            <div style={styles.tdPlayerName}>{row.name}</div>
+            <div style={styles.tdPlayerName}>
+              {row.name}
+              {row.team && <span style={{ color: "#7A828F", fontWeight: 400, fontSize: 11 }}> {row.team}</span>}
+            </div>
             <div style={styles.tdPlayerMeta}>
-              {row.team ? row.team + " · " : ""}ADP {row.adp}
+              ADP {row.adp}
               {keeperTag}
               {lastDraftTag}
             </div>
           </>
         )}
       </td>
-      <td style={{ ...styles.td, ...tBreakStyle, ...bgStyle }}>
-        <span style={{ ...styles.posTagSm, background: POS_COLOR[row.pos] }}>{row.pos}</span>
-      </td>
+      {showPos && (
+        <td style={{ ...styles.td, ...tBreakStyle, ...bgStyle }}>
+          <span style={{ ...styles.posTagSm, background: POS_COLOR[row.pos] }}>{row.pos}</span>
+        </td>
+      )}
       <td style={{ ...styles.td, ...styles.tdMono, ...tBreakStyle, ...bgStyle }}>
         {row.tier ? (
           <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
@@ -160,6 +177,14 @@ export function BoardRow({
           "—"
         )}
       </td>
+      {actCost !== undefined && (
+        <td
+          style={{ ...styles.td, ...styles.tdMono, ...tBreakStyle, ...bgStyle, color: "#8B92A0" }}
+          title="What this positional rank actually cost in your league (weighted 3-yr draft price)"
+        >
+          {actCost != null ? `$${actCost}` : "—"}
+        </td>
+      )}
       <td style={{ ...styles.td, ...styles.tdMono, ...tBreakStyle, ...bgStyle }}>{row.isKeeper ? "—" : row.target}</td>
       <td
         style={{
@@ -182,19 +207,21 @@ export function BoardRow({
           onChange={(e) => onMeta(row.id, "max", e.target.value)}
         />
       </td>
-      <td style={{ ...styles.td, ...tBreakStyle, ...bgStyle }}>
-        {row.isKeeper ? (
-          <span style={{ fontSize: 10, color: "#8B92A0" }}>—</span>
-        ) : (
-          <input
-            style={{ ...styles.cellInput, fontWeight: 700, color: row.isDrafted ? "#EDEEF0" : "#8B92A0" }}
-            type="number"
-            value={row.paid}
-            placeholder="—"
-            onChange={(e) => onPaid(row, e.target.value)}
-          />
-        )}
-      </td>
+      {showPaid && (
+        <td style={{ ...styles.td, ...tBreakStyle, ...bgStyle }}>
+          {row.isKeeper ? (
+            <span style={{ fontSize: 10, color: "#8B92A0" }}>—</span>
+          ) : (
+            <input
+              style={{ ...styles.cellInput, fontWeight: 700, color: row.isDrafted ? "#EDEEF0" : "#8B92A0" }}
+              type="number"
+              value={row.paid}
+              placeholder="—"
+              onChange={(e) => onPaid(row, e.target.value)}
+            />
+          )}
+        </td>
+      )}
     </tr>
   );
 }

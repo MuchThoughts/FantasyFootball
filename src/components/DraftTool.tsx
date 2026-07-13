@@ -32,7 +32,6 @@ import { styles, fontImport, chipActive } from "./styles";
 import { ProfileBar } from "./ProfileBar";
 import { BoardRow } from "./BoardRow";
 import { TierDivider } from "./TierDivider";
-import { StrategyTab } from "./StrategyTab";
 import { RankingsTab } from "./RankingsTab";
 import { MarketReadPanel } from "./MarketReadPanel";
 import { StrategyAdvisor } from "./StrategyAdvisor";
@@ -115,7 +114,7 @@ interface DraftToolProps {
 function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: DraftToolProps) {
   const { data, update, loaded, saveState } = useDraftState(profileId);
 
-  const [tab, setTab] = useState<"board" | "targets" | "strategy" | "rankings" | "drafters" | "offenses" | "rawcosts">("board");
+  const [tab, setTab] = useState<"board" | "targets" | "rankings" | "drafters" | "offenses" | "rawcosts">("board");
   const [posFilter, setPosFilter] = useState("ALL");
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState("adp");
@@ -639,9 +638,6 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
         <button style={tab === "targets" ? styles.tabActive : styles.tab} onClick={() => setTab("targets")}>
           Targets
         </button>
-        <button style={tab === "strategy" ? styles.tabActive : styles.tab} onClick={() => setTab("strategy")}>
-          Strategy
-        </button>
         <button style={tab === "rankings" ? styles.tabActive : styles.tab} onClick={() => setTab("rankings")}>
           Rankings
         </button>
@@ -960,23 +956,6 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
         </>
       )}
 
-      {tab === "strategy" && (
-        <StrategyTab
-          strategies={d.strategies}
-          activeStrategyId={d.activeStrategyId}
-          setActiveStrategyId={selectStrategy}
-          budget={d.settings.budget}
-          boardRows={board.rows}
-          onSlotPos={setSlotPos}
-          onSlotAmount={setSlotAmount}
-          onName={setStrategyName}
-          onAdd={addStrategy}
-          onDelete={deleteStrategy}
-          onReset={resetStrategy}
-          onRate={setInterest}
-        />
-      )}
-
       {tab === "rankings" && (
         <RankingsTab
           players={basePlayers}
@@ -997,7 +976,22 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
       {tab === "offenses" && <OffensesTab rows={offenseRows} sort={offSort} setSort={setOffSort} />}
 
       {tab === "targets" && (
-        <TargetsTab board={board} strategy={activeStrategy} onPaid={setPaid} onMeta={setMeta} onRate={setInterest} />
+        <TargetsTab
+          board={board}
+          marketRead={marketRead}
+          strategies={d.strategies}
+          activeStrategyId={d.activeStrategyId}
+          budget={d.settings.budget}
+          setActiveStrategyId={selectStrategy}
+          onSlotPos={setSlotPos}
+          onSlotAmount={setSlotAmount}
+          onName={setStrategyName}
+          onAdd={addStrategy}
+          onDelete={deleteStrategy}
+          onReset={resetStrategy}
+          onMeta={setMeta}
+          onRate={setInterest}
+        />
       )}
 
       {tab === "rawcosts" && <RawCostsTab />}
