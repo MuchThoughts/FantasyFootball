@@ -38,6 +38,7 @@ import { MarketReadPanel } from "./MarketReadPanel";
 import { StrategyAdvisor } from "./StrategyAdvisor";
 import { InsightsTab } from "./InsightsTab";
 import { OffensesTab } from "./OffensesTab";
+import { RawCostsTab } from "./RawCostsTab";
 
 const PROFILE_STORAGE_KEY = "ffauction2026:profileId";
 
@@ -113,7 +114,7 @@ interface DraftToolProps {
 function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: DraftToolProps) {
   const { data, update, loaded, saveState } = useDraftState(profileId);
 
-  const [tab, setTab] = useState<"board" | "strategy" | "rankings" | "drafters" | "offenses">("board");
+  const [tab, setTab] = useState<"board" | "strategy" | "rankings" | "drafters" | "offenses" | "rawcosts">("board");
   const [posFilter, setPosFilter] = useState("ALL");
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState("adp");
@@ -646,6 +647,9 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
         <button style={tab === "offenses" ? styles.tabActive : styles.tab} onClick={() => setTab("offenses")}>
           Team Stats
         </button>
+        <button style={tab === "rawcosts" ? styles.tabActive : styles.tab} onClick={() => setTab("rawcosts")}>
+          Raw Draft Costs
+        </button>
       </div>
 
       {tab === "board" && (
@@ -987,6 +991,8 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
       )}
 
       {tab === "offenses" && <OffensesTab rows={offenseRows} sort={offSort} setSort={setOffSort} />}
+
+      {tab === "rawcosts" && <RawCostsTab />}
 
       <div style={styles.footer}>{saveState === "saving" ? "Saving…" : saveState === "error" ? "Save failed" : "Synced"}</div>
     </div>
