@@ -23,6 +23,7 @@ export interface RankingSource {
   name: string;
   createdAt: string;
   ranks: Record<string, number>; // playerId -> overall rank (1..N, dense)
+  tiers?: Record<string, number>; // playerId -> tier, when the upload had a tier column
 }
 
 export interface RankingConfig {
@@ -133,6 +134,7 @@ export function applyRanking(players: Player[], uploaded: RankingSource[], confi
 
 export interface ParsedRanking {
   ranks: Record<string, number>; // playerId -> dense rank
+  tiers: Record<string, number>; // playerId -> tier (empty if the upload had no tier column)
   matched: number;
   unmatched: string[]; // names we couldn't match to a player on the board
 }
@@ -153,8 +155,9 @@ function normalizeName(name: string): string {
   return NAME_ALIASES[n] ?? n;
 }
 
-// Split one CSV/TSV line into cells, honoring double quotes.
-function splitLine(line: string): string[] {
+// Split one CSV/TSV line into cells, honoring double quotes. Keeps empty cells
+// so callers can index by column; filter them out if you only want values.
+function splitLineRaw(line: string): string[] {
   const cells: string[] = [];
   let cur = "";
   let inQuotes = false;
@@ -171,7 +174,14 @@ function splitLine(line: string): string[] {
     } else cur += ch;
   }
   cells.push(cur.trim());
-  return cells.filter((c) => c.length > 0);
+  return cells;
+}
+
+// Parse a numeric cell, tolerating decorations like "1." or "#3".
+function parseNum(cell: string | undefined): number | null {
+  if (cell == null) return null;
+  const n = Number(cell.replace(/[^0-9.\-]/g, ""));
+  return cell.trim() !== "" && Number.isFinite(n) ? n : null;
 }
 
 const POS_TOKEN = /^(qb|rb|wr|te|def|dst|d\/st|k)[0-9]*$/i;
@@ -189,6 +199,7 @@ export function parseRankingUpload(text: string, players: Player[]): ParsedRanki
   for (const p of players) byNorm.set(normalizeName(p.name), uid(p.name));
 
   const matchCell = (cell: string): string | null => {
+    if (!cell) return null;
     const direct = byNorm.get(normalizeName(cell));
     if (direct) return direct;
     // tolerate trailing decorations: "Josh Allen BUF", "Josh Allen BUF QB1"
@@ -200,40 +211,58 @@ export function parseRankingUpload(text: string, players: Player[]): ParsedRanki
     return null;
   };
 
-  const entries: { id: string; rank: number }[] = [];
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.length > 0);
+  if (lines.length === 0) return { ranks: {}, tiers: {}, matched: 0, unmatched: [] };
+
+  // Header-based columns unlock tier extraction. The first line is a header when
+  // it reads like column names and matches no player.
+  const head = splitLineRaw(lines[0]).map((c) => c.toLowerCase().trim());
+  const looksHeader = head.some((c) => /\b(rank|player|name|overall|tier|pos|team)\b/.test(c)) && !head.some((c) => matchCell(c));
+  const findCol = (re: RegExp) => head.findIndex((c) => re.test(c));
+  const rankCol = looksHeader ? (findCol(/^(rank|rk|overall|ovr|#)$/) >= 0 ? findCol(/^(rank|rk|overall|ovr|#)$/) : findCol(/rank|overall|ovr/)) : -1;
+  const tierCol = looksHeader ? findCol(/tier/) : -1;
+  const nameCol = looksHeader ? findCol(/player|name/) : -1;
+  const columnMode = looksHeader && nameCol >= 0;
+
+  const entries: { id: string; rank: number; tier: number | null }[] = [];
   const unmatched: string[] = [];
   const seen = new Set<string>();
   let ordinal = 0;
 
-  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.length > 0);
-  for (const line of lines) {
-    const cells = splitLine(line);
+  const dataLines = looksHeader ? lines.slice(1) : lines;
+  for (const line of dataLines) {
+    const raw = splitLineRaw(line);
+    const cells = raw.map((c) => c.trim()).filter((c) => c.length > 0);
     if (cells.length === 0) continue;
-
-    let rank: number | null = null;
-    let matchedId: string | null = null;
-    let nameGuess = "";
-    for (const cell of cells) {
-      const asNum = Number(cell);
-      if (rank === null && cell !== "" && Number.isFinite(asNum)) {
-        rank = asNum;
-        continue;
-      }
-      if (POS_TOKEN.test(cell)) continue;
-      if (!matchedId) matchedId = matchCell(cell);
-      if (cell.length > nameGuess.length && !Number.isFinite(asNum)) nameGuess = cell;
-    }
-
-    // header row: no player matched and it mentions column-ish words
-    if (!matchedId && /\b(rank|player|name|pos|team|overall)\b/i.test(line) && entries.length === 0 && unmatched.length === 0) {
-      continue;
-    }
-
     ordinal++;
+
+    let matchedId: string | null = null;
+    let rank: number | null = null;
+    let tier: number | null = null;
+    let nameGuess = "";
+
+    if (columnMode) {
+      nameGuess = (raw[nameCol] ?? "").trim();
+      matchedId = matchCell(nameGuess);
+      rank = rankCol >= 0 ? parseNum(raw[rankCol]) : null;
+      if (tierCol >= 0) tier = parseNum(raw[tierCol]);
+    } else {
+      for (const cell of cells) {
+        const asNum = Number(cell);
+        if (rank === null && cell !== "" && Number.isFinite(asNum)) {
+          rank = asNum;
+          continue;
+        }
+        if (POS_TOKEN.test(cell)) continue;
+        if (!matchedId) matchedId = matchCell(cell);
+        if (cell.length > nameGuess.length && !Number.isFinite(asNum)) nameGuess = cell;
+      }
+    }
+
     if (matchedId) {
       if (!seen.has(matchedId)) {
         seen.add(matchedId);
-        entries.push({ id: matchedId, rank: rank ?? ordinal });
+        entries.push({ id: matchedId, rank: rank ?? ordinal, tier });
       }
     } else if (nameGuess) {
       unmatched.push(nameGuess);
@@ -243,9 +272,11 @@ export function parseRankingUpload(text: string, players: Player[]): ParsedRanki
   // densify to 1..N in rank order (stable on upload order for ties)
   entries.sort((a, b) => a.rank - b.rank);
   const ranks: Record<string, number> = {};
+  const tiers: Record<string, number> = {};
   entries.forEach((e, i) => {
     ranks[e.id] = i + 1;
+    if (e.tier != null && Number.isFinite(e.tier)) tiers[e.id] = e.tier;
   });
 
-  return { ranks, matched: entries.length, unmatched };
+  return { ranks, tiers, matched: entries.length, unmatched };
 }

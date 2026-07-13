@@ -35,6 +35,35 @@ export function slotLabel(id: string): string {
   return id.slice(0, -1).toUpperCase() + id.slice(-1);
 }
 
+export interface SlotLabel {
+  slotId: string;
+  label: string; // position-ordinal name, e.g. "QB1", "RB3", "QB3 Bench"
+  amount: number;
+  pos: string;
+  bench: boolean;
+}
+
+// Name each slot by its position and price-rank within that position, tagging
+// bench slots: a $7 QB behind $30/$21 QBs becomes "QB3 Bench". These labels drive
+// the Targets sections and the board's assign-to-slot menu.
+export function buildSlotLabels(strategy: { slots: { id: string; pos: string; amount: number }[] } | undefined): Map<string, SlotLabel> {
+  const map = new Map<string, SlotLabel>();
+  if (!strategy) return map;
+  const byPos: Record<string, { id: string; amount: number }[]> = {};
+  strategy.slots.forEach((sl) => {
+    (byPos[sl.pos] = byPos[sl.pos] || []).push({ id: sl.id, amount: Number(sl.amount) || 0 });
+  });
+  for (const pos of Object.keys(byPos)) {
+    byPos[pos]
+      .sort((a, b) => b.amount - a.amount || a.id.localeCompare(b.id))
+      .forEach((s, i) => {
+        const bench = s.id.startsWith("bench");
+        map.set(s.id, { slotId: s.id, label: `${pos}${i + 1}${bench ? " Bench" : ""}`, amount: s.amount, pos, bench });
+      });
+  }
+  return map;
+}
+
 export function uid(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
@@ -193,6 +222,10 @@ export interface DraftData {
   // explicitly not, absent = use the built-in likely default. Checked players
   // become real keepers via expectedKeepers(); edited on the Insights tab.
   keeperPicks: Record<string, boolean>;
+  // Curated slot assignments per strategy: strategyId -> (playerUid -> slotId).
+  // A player pinned to a slot surfaces in that slot's Targets section (set via
+  // the board's press-and-hold menu).
+  assignmentsByStrategy: Record<string, Record<string, string>>;
   // Uploaded ranking lists plus which source/blend/overrides are active —
   // see rankings.ts. The active ranking drives board order and price targets.
   rankingSources: RankingSource[];
@@ -284,7 +317,10 @@ export function computeBoard(
   playerMeta: Record<string, PlayerMetaEntry>,
   tierOverrides: Record<string, number[]>,
   activeStrategy: Strategy | undefined,
-  activeInterest: Record<string, Interest>
+  activeInterest: Record<string, Interest>,
+  // When the active ranking supplies its own tiers (an uploaded list with a tier
+  // column), use those directly; otherwise tiers are derived from strategy prices.
+  sourceTiers?: Record<string, number>
 ): Board {
   const totalBudget = settings.teams * settings.budget;
   const keeperList = Object.entries(keepers).map(([id, k]) => ({ id, ...k }));
@@ -333,10 +369,19 @@ export function computeBoard(
   const tierMap: Record<string, number> = {};
   const tierBreaksUsed: Record<string, number[]> = {};
   const positionCounts: Record<string, number> = {};
+  const useSourceTiers = !!sourceTiers && Object.keys(sourceTiers).length > 0;
   POSITIONS.forEach((pos) => {
     const posRows = rankedRows.filter((r) => r.pos === pos);
     const n = posRows.length;
     positionCounts[pos] = n;
+
+    if (useSourceTiers) {
+      // Tiers come from the uploaded ranking. No draggable break bars — the
+      // divider lines are drawn wherever the uploaded tier changes.
+      tierBreaksUsed[pos] = [];
+      posRows.forEach((r) => (tierMap[r.id] = sourceTiers![r.id] ?? 0));
+      return;
+    }
 
     // Presence of the key (even an empty array, meaning "all bars manually removed")
     // means the user has taken manual control of this position's tiers; absence means

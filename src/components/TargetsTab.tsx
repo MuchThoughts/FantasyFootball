@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Strategy } from "@/lib/data/strategies";
 import {
   assignKeepersToSlots,
@@ -14,10 +14,11 @@ import {
   POS_COLOR,
   POSITIONS,
   Pos,
-  slotLabel,
+  SlotLabel,
 } from "@/lib/draftLogic";
 import { rawCostAt } from "@/lib/data/rawDraftCosts";
 import { BoardRow } from "./BoardRow";
+import { SlotMenu, SlotMenuState } from "./SlotMenu";
 import { styles, chipActive } from "./styles";
 
 // Reach/Target/Settle are fixed 5-player windows on the availability ladder, so
@@ -51,6 +52,9 @@ interface TargetsTabProps {
   strategies: Strategy[];
   activeStrategyId: string;
   budget: number;
+  // player uid -> slot id (active strategy), and the position-ordinal slot labels.
+  assignments: Record<string, string>;
+  slotLabels: Map<string, SlotLabel>;
   setActiveStrategyId: (id: string) => void;
   onSlotPos: (strategyId: string, slotId: string, pos: string) => void;
   onSlotAmount: (strategyId: string, slotId: string, value: string) => void;
@@ -60,6 +64,8 @@ interface TargetsTabProps {
   onReset: (id: string) => void;
   onMeta: (id: string, field: "max", value: string) => void;
   onRate: (row: BoardRowType, value: Interest) => void;
+  onAssign: (playerId: string, slotId: string | null) => void;
+  onDislike: (playerId: string, value: Interest) => void;
 }
 
 export function TargetsTab({
@@ -68,6 +74,8 @@ export function TargetsTab({
   strategies,
   activeStrategyId,
   budget,
+  assignments,
+  slotLabels,
   setActiveStrategyId,
   onSlotPos,
   onSlotAmount,
@@ -77,8 +85,22 @@ export function TargetsTab({
   onReset,
   onMeta,
   onRate,
+  onAssign,
+  onDislike,
 }: TargetsTabProps) {
   const strategy = strategies.find((s) => s.id === activeStrategyId) || strategies[0];
+
+  const [menu, setMenu] = useState<SlotMenuState | null>(null);
+  const assignedLabelFor = (id: string) => (assignments[id] ? slotLabels.get(assignments[id])?.label ?? null : null);
+  const openMenu = (row: BoardRowType, rect: SlotMenuState["rect"]) =>
+    setMenu({
+      playerId: row.id,
+      playerName: row.name,
+      pos: row.pos,
+      disliked: row.interest === "dislike",
+      assignedSlotId: assignments[row.id] ?? null,
+      rect,
+    });
 
   const myKeepers = useMemo(() => board.rows.filter((r) => r.isKeeper && r.mine), [board.rows]);
 
@@ -98,12 +120,12 @@ export function TargetsTab({
       .filter((sl) => !filled.has(sl.id))
       .map((sl) => ({
         id: sl.id,
-        label: slotLabel(sl.id),
+        label: slotLabels.get(sl.id)?.label ?? sl.id,
         pos: sl.pos,
         amount: Number(sl.amount) || 0,
         fixed: !!FIXED_SLOT_POS[sl.id],
       }));
-  }, [strategy, filled]);
+  }, [strategy, filled, slotLabels]);
 
   const availByPos = useMemo(() => {
     const m: Partial<Record<Pos, BoardRowType[]>> = {};
@@ -139,15 +161,39 @@ export function TargetsTab({
         const target = avail.slice(start, start + BAND_SIZE);
         const settle = avail.slice(start + BAND_SIZE, start + 2 * BAND_SIZE);
 
+        // Force-include players you've assigned to this cluster's slots, dropped
+        // into whichever band their price falls in, then re-sort each band.
+        const clusterSlotIds = new Set(slots.map((s) => s.id));
+        const present = new Set([...reach, ...target, ...settle].map((r) => r.id));
+        for (const r of avail) {
+          const a = assignments[r.id];
+          if (!a || !clusterSlotIds.has(a) || present.has(r.id)) continue;
+          const t = r.target as number;
+          if (t > hi * BAND_HI) reach.push(r);
+          else if (t < lo * 0.8) settle.push(r);
+          else target.push(r);
+        }
+        const bySort = (a: BoardRowType, b: BoardRowType) => (b.target as number) - (a.target as number);
+        reach.sort(bySort);
+        target.sort(bySort);
+        settle.sort(bySort);
+
         if (reach.length + target.length + settle.length > 0)
           out.push({ key: slots[0].id, pos, slots, lo, hi, plan, reach, target, settle });
       }
     });
     return out;
-  }, [openSlots, availByPos]);
+  }, [openSlots, availByPos, assignments]);
 
-  // $1 endgame slots — editable but no shopping list.
+  // $1 endgame slots — editable, plus any players you've curated onto them.
   const fliers = useMemo(() => openSlots.filter((s) => s.amount < 2), [openSlots]);
+  const assignedByFlier = useMemo(() => {
+    const m: Record<string, BoardRowType[]> = {};
+    for (const f of fliers) {
+      m[f.id] = (availByPos[f.pos] ?? []).filter((r) => assignments[r.id] === f.id);
+    }
+    return m;
+  }, [fliers, availByPos, assignments]);
 
   // ── Status bar + allocation figures ─────────────────────────────────────────
   const posPicks: Record<string, number> = { QB: 0, RB: 0, WR: 0, TE: 0, DEF: 0 };
@@ -277,7 +323,8 @@ export function TargetsTab({
       <div style={{ fontSize: 11, color: "#8B92A0", margin: "4px 0 10px" }}>
         Edit a slot&apos;s position or dollar target below and its shopping list refreshes. <b>Reach</b> = the five
         above your price (bid only at a discount), <b>Target</b> = what your money buys, <b>Settle</b> = the fallback
-        five. Press-and-hold a name to dislike it and the next-closest slides in.
+        five. Press-and-hold a name to dislike it or pin it to a slot — pinned players show first in that slot&apos;s
+        section.
       </div>
 
       {POSITIONS.filter((pos) => clusters.some((c) => c.pos === pos)).map((pos) => (
@@ -288,7 +335,16 @@ export function TargetsTab({
           {clusters
             .filter((c) => c.pos === pos)
             .map((c) => (
-              <ClusterBlock key={c.key} cluster={c} marketRead={marketRead} slotEditor={slotEditor} onMeta={onMeta} onRate={onRate} />
+              <ClusterBlock
+                key={c.key}
+                cluster={c}
+                marketRead={marketRead}
+                slotEditor={slotEditor}
+                assignedLabelFor={assignedLabelFor}
+                onOpenMenu={openMenu}
+                onMeta={onMeta}
+                onRate={onRate}
+              />
             ))}
         </div>
       ))}
@@ -296,9 +352,44 @@ export function TargetsTab({
       {fliers.length > 0 && (
         <div style={{ ...styles.panel, padding: 10, marginBottom: 12 }}>
           <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: 0.4, color: "#8B92A0", marginBottom: 6 }}>
-            $1 FLIERS <span style={{ color: "#5B6270", fontWeight: 400 }}>· endgame darts, shop these on the Board</span>
+            $1 FLIERS <span style={{ color: "#5B6270", fontWeight: 400 }}>· curate darts by pinning players from the Board</span>
           </div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{fliers.map(slotEditor)}</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {fliers.map((f) => (
+              <div key={f.id}>
+                <div style={{ marginBottom: assignedByFlier[f.id]?.length ? 4 : 0 }}>{slotEditor(f)}</div>
+                {assignedByFlier[f.id]?.length > 0 && (
+                  <div style={styles.tableWrap}>
+                    <table style={styles.table}>
+                      <tbody>
+                        {assignedByFlier[f.id].map((row) => (
+                          <BoardRow
+                            key={row.id}
+                            row={row}
+                            tierBreak={false}
+                            isTarget={false}
+                            dragEnabled={false}
+                            dragging={false}
+                            dropEdge={{}}
+                            onDragStart={() => {}}
+                            playerStickyLeft={38}
+                            showPos={false}
+                            showPaid={false}
+                            actCost={rawCostAt(row.pos, row.effRank)}
+                            assignedLabel={assignedLabelFor(row.id)}
+                            onOpenMenu={openMenu}
+                            onPaid={() => {}}
+                            onMeta={onMeta}
+                            onRate={onRate}
+                          />
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
@@ -310,6 +401,22 @@ export function TargetsTab({
           Delete strategy
         </button>
       </div>
+
+      {menu && (
+        <SlotMenu
+          menu={menu}
+          slots={[...slotLabels.values()].filter((s) => s.pos === menu.pos).sort((a, b) => b.amount - a.amount)}
+          onDislike={() => {
+            onDislike(menu.playerId, menu.disliked ? "neutral" : "dislike");
+            setMenu(null);
+          }}
+          onAssign={(slotId) => {
+            onAssign(menu.playerId, slotId);
+            setMenu(null);
+          }}
+          onClose={() => setMenu(null)}
+        />
+      )}
     </div>
   );
 }
@@ -440,12 +547,16 @@ function ClusterBlock({
   cluster,
   marketRead,
   slotEditor,
+  assignedLabelFor,
+  onOpenMenu,
   onMeta,
   onRate,
 }: {
   cluster: Cluster;
   marketRead: MarketRead;
   slotEditor: (sl: OpenSlot) => React.ReactNode;
+  assignedLabelFor: (id: string) => string | null;
+  onOpenMenu: (row: BoardRowType, rect: SlotMenuState["rect"]) => void;
   onMeta: (id: string, field: "max", value: string) => void;
   onRate: (row: BoardRowType, value: Interest) => void;
 }) {
@@ -510,6 +621,8 @@ function ClusterBlock({
                     showPos={false}
                     showPaid={false}
                     actCost={rawCostAt(row.pos, row.effRank)}
+                    assignedLabel={assignedLabelFor(row.id)}
+                    onOpenMenu={onOpenMenu}
                     onPaid={noop}
                     onMeta={onMeta}
                     onRate={onRate}

@@ -3,16 +3,16 @@
 import { useRef, useState } from "react";
 import { Interest } from "@/lib/draftLogic";
 
-const LONG_PRESS_MS = 1650;
+const LONG_PRESS_MS = 500;
 const CLICK_DELAY_MS = 260; // window to distinguish a single click from a double
 
 // Shared pointer-interaction logic for rating a player by clicking their name:
-//   click        -> Like    (click again while Liked  -> back to Neutral)
-//   double-click -> Love     (again while Loved        -> back to Neutral)
-//   press & hold -> Dislike  (again while Disliked     -> back to Neutral)
-// Each gesture toggles, so the same action undoes itself. Used on both the
-// Strategy tab target list and the Board player names.
-export function usePlayerRating(interest: Interest, onRate: (value: Interest) => void) {
+//   click        -> Like  (click again while Liked -> back to Neutral)
+//   double-click -> Love  (again while Loved       -> back to Neutral)
+//   press & hold -> onHold() (opens the assign/dislike menu); if no onHold is
+//                   given it falls back to toggling Dislike.
+// Each click gesture toggles, so the same action undoes itself.
+export function usePlayerRating(interest: Interest, onRate: (value: Interest) => void, onHold?: () => void) {
   const [pressing, setPressing] = useState(false);
   const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -31,7 +31,8 @@ export function usePlayerRating(interest: Interest, onRate: (value: Interest) =>
     pressTimer.current = setTimeout(() => {
       longPressFired.current = true;
       setPressing(false);
-      onRate(interest === "dislike" ? "neutral" : "dislike");
+      if (onHold) onHold();
+      else onRate(interest === "dislike" ? "neutral" : "dislike");
     }, LONG_PRESS_MS);
   };
 

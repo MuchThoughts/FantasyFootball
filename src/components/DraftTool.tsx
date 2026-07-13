@@ -8,6 +8,7 @@ import { DEFAULT_STRATEGIES } from "@/lib/data/strategies";
 import {
   BoardRow as BoardRowType,
   Interest,
+  buildSlotLabels,
   computeBoard,
   computeMarketRead,
   computeStrategySlots,
@@ -23,6 +24,7 @@ import {
   uid,
 } from "@/lib/draftLogic";
 import { rawCostAt } from "@/lib/data/rawDraftCosts";
+import { SlotMenu, SlotMenuState } from "./SlotMenu";
 import { BUILTIN_SOURCE_ID, BUILTIN_SOURCE_NAME, RankingConfig, RankingSource, applyRanking } from "@/lib/rankings";
 import { dropEdgeStyle, dropRank, useRowDrag } from "@/hooks/useRowDrag";
 import { useProfiles } from "@/hooks/useProfiles";
@@ -151,13 +153,32 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
     [d.interestByStrategy, d.activeStrategyId]
   );
 
+  // Slot assignments (player -> slot) and the position-ordinal slot labels for
+  // the active strategy, shared by the board's assign menu and the Targets page.
+  const assignments = useMemo(
+    () => d.assignmentsByStrategy[d.activeStrategyId] ?? {},
+    [d.assignmentsByStrategy, d.activeStrategyId]
+  );
+  const slotLabels = useMemo(() => buildSlotLabels(activeStrategy), [activeStrategy]);
+
+  // Press-and-hold assign/dislike menu (board). Session-only.
+  const [slotMenu, setSlotMenu] = useState<SlotMenuState | null>(null);
+
   // Keepers are derived, not stored: the Insights checkboxes (keeperPicks over
   // the built-in defaults) are the only keeper designation in the app.
   const keepers = useMemo(() => expectedKeepers(d.keeperPicks), [d.keeperPicks]);
 
+  // Tiers from the active uploaded ranking (a single source with a tier column);
+  // absent for the built-in list or blends, where tiers stay strategy-derived.
+  const sourceTiers = useMemo(() => {
+    if (d.ranking.mode !== "source" || d.ranking.activeSourceId === BUILTIN_SOURCE_ID) return undefined;
+    const src = d.rankingSources.find((s) => s.id === d.ranking.activeSourceId);
+    return src?.tiers && Object.keys(src.tiers).length > 0 ? src.tiers : undefined;
+  }, [d.ranking.mode, d.ranking.activeSourceId, d.rankingSources]);
+
   const board = useMemo(
-    () => computeBoard(d.settings, keepers, d.drafted, allPlayers, d.playerMeta, d.tierOverrides, activeStrategy, activeInterest),
-    [d.settings, keepers, d.drafted, allPlayers, d.playerMeta, d.tierOverrides, activeStrategy, activeInterest]
+    () => computeBoard(d.settings, keepers, d.drafted, allPlayers, d.playerMeta, d.tierOverrides, activeStrategy, activeInterest, sourceTiers),
+    [d.settings, keepers, d.drafted, allPlayers, d.playerMeta, d.tierOverrides, activeStrategy, activeInterest, sourceTiers]
   );
 
   // Open-market price per player — the league's 3-yr price at each player's TRUE
@@ -271,6 +292,32 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
         if (cand && next === cand.likelyDefault) delete picks[playerUid];
         else picks[playerUid] = next;
         return { ...prev, keeperPicks: picks };
+      });
+    },
+    [update]
+  );
+
+  // Set interest by player id (used by the assign/dislike menu, which only has an id).
+  const setInterestById = useCallback(
+    (id: string, value: Interest) => {
+      update((prev) => {
+        const map = { ...(prev.interestByStrategy[prev.activeStrategyId] ?? {}) };
+        if (value === "neutral") delete map[id];
+        else map[id] = value;
+        return { ...prev, interestByStrategy: { ...prev.interestByStrategy, [prev.activeStrategyId]: map } };
+      });
+    },
+    [update]
+  );
+
+  // Pin (or unpin) a player to a draft slot for the active strategy.
+  const setAssignment = useCallback(
+    (playerId: string, slotId: string | null) => {
+      update((prev) => {
+        const map = { ...(prev.assignmentsByStrategy[prev.activeStrategyId] ?? {}) };
+        if (slotId === null) delete map[playerId];
+        else map[playerId] = slotId;
+        return { ...prev, assignmentsByStrategy: { ...prev.assignmentsByStrategy, [prev.activeStrategyId]: map } };
       });
     },
     [update]
@@ -517,10 +564,13 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
         const strategies = next.length ? next : DEFAULT_STRATEGIES;
         const interestByStrategy = { ...prev.interestByStrategy };
         delete interestByStrategy[id];
+        const assignmentsByStrategy = { ...prev.assignmentsByStrategy };
+        delete assignmentsByStrategy[id];
         return {
           ...prev,
           strategies,
           interestByStrategy,
+          assignmentsByStrategy,
           activeStrategyId: prev.activeStrategyId === id ? "preset-balanced" : prev.activeStrategyId,
         };
       });
@@ -742,12 +792,12 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
                 {p === "LIKED" ? "♥ Liked" : p}
               </button>
             ))}
-            {isPosFilter && (
+            {isPosFilter && !sourceTiers && (
               <button style={styles.smallBtn} onClick={() => addTierBar(posFilter)}>
                 + Add tier
               </button>
             )}
-            {isPosFilter && Object.prototype.hasOwnProperty.call(d.tierOverrides, posFilter) && (
+            {isPosFilter && !sourceTiers && Object.prototype.hasOwnProperty.call(d.tierOverrides, posFilter) && (
               <button style={styles.smallBtn} onClick={() => resetTiers(posFilter)}>
                 Reset {posFilter} tiers
               </button>
@@ -756,7 +806,9 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
 
           {isPosFilter && (
             <div style={{ fontSize: 11, color: "#8B92A0", marginBottom: 10 }}>
-              Drag a tier bar to move players between tiers, or use the ✕ on a bar to remove it.
+              {sourceTiers
+                ? "Tiers come from your uploaded ranking. Press and hold a name to dislike or assign it to a slot."
+                : "Drag a tier bar to move players between tiers, or use the ✕ on a bar to remove it. Press and hold a name to dislike or assign it to a slot."}
             </div>
           )}
 
@@ -818,6 +870,17 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
                           playerStickyLeft={playerStickyLeft}
                           showPos={false}
                           actCost={rawCostAt(row.pos, row.effRank)}
+                          assignedLabel={assignments[row.id] ? slotLabels.get(assignments[row.id])?.label ?? null : null}
+                          onOpenMenu={(r, rect) =>
+                            setSlotMenu({
+                              playerId: r.id,
+                              playerName: r.name,
+                              pos: r.pos,
+                              disliked: r.interest === "dislike",
+                              assignedSlotId: assignments[r.id] ?? null,
+                              rect,
+                            })
+                          }
                           isTarget={strategyTargets.targetIds.has(row.id)}
                           dragEnabled={boardDragEnabled}
                           dragging={boardDrag?.id === row.id}
@@ -878,6 +941,8 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
           strategies={d.strategies}
           activeStrategyId={d.activeStrategyId}
           budget={d.settings.budget}
+          assignments={assignments}
+          slotLabels={slotLabels}
           setActiveStrategyId={selectStrategy}
           onSlotPos={setSlotPos}
           onSlotAmount={setSlotAmount}
@@ -887,10 +952,28 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
           onReset={resetStrategy}
           onMeta={setMeta}
           onRate={setInterest}
+          onAssign={setAssignment}
+          onDislike={setInterestById}
         />
       )}
 
       {tab === "rawcosts" && <RawCostsTab />}
+
+      {slotMenu && (
+        <SlotMenu
+          menu={slotMenu}
+          slots={[...slotLabels.values()].filter((s) => s.pos === slotMenu.pos).sort((a, b) => b.amount - a.amount)}
+          onDislike={() => {
+            setInterestById(slotMenu.playerId, slotMenu.disliked ? "neutral" : "dislike");
+            setSlotMenu(null);
+          }}
+          onAssign={(slotId) => {
+            setAssignment(slotMenu.playerId, slotId);
+            setSlotMenu(null);
+          }}
+          onClose={() => setSlotMenu(null)}
+        />
+      )}
 
       <div style={styles.footer}>{saveState === "saving" ? "Saving…" : saveState === "error" ? "Save failed" : "Synced"}</div>
     </div>

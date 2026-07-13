@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef } from "react";
 import { BoardRow as BoardRowType, Interest, POS_COLOR, tierColor } from "@/lib/draftLogic";
 import { LAST_DRAFT } from "@/lib/data/lastDraft";
 import { usePlayerRating } from "@/hooks/usePlayerRating";
@@ -27,6 +28,11 @@ interface BoardRowProps {
   // When defined, render an "Act" cell (actual historical draft cost for this
   // pos+rank) just left of Tgt. undefined = no Act column at all.
   actCost?: number | null;
+  // Press-and-hold opens the assign/dislike menu; the parent renders it anchored
+  // to the returned rect. When absent, hold falls back to toggling Dislike.
+  onOpenMenu?: (row: BoardRowType, rect: { top: number; bottom: number; left: number }) => void;
+  // The slot this player is pinned to (position-ordinal label), shown as a tag.
+  assignedLabel?: string | null;
   onPaid: (row: BoardRowType, value: string) => void;
   onMeta: (id: string, field: "max", value: string) => void;
   onRate: (row: BoardRowType, value: Interest) => void;
@@ -45,11 +51,23 @@ export function BoardRow({
   showPos = true,
   showPaid = true,
   actCost,
+  onOpenMenu,
+  assignedLabel,
   onPaid,
   onMeta,
   onRate,
 }: BoardRowProps) {
-  const { pressing, handlers } = usePlayerRating(row.interest, (v) => onRate(row, v));
+  const nameRef = useRef<HTMLDivElement>(null);
+  const onHold = onOpenMenu
+    ? () => {
+        const el = nameRef.current;
+        if (el) {
+          const r = el.getBoundingClientRect();
+          onOpenMenu(row, { top: r.top, bottom: r.bottom, left: r.left });
+        }
+      }
+    : undefined;
+  const { pressing, handlers } = usePlayerRating(row.interest, (v) => onRate(row, v), onHold);
   const nameClickable = !row.isKeeper && !row.isDrafted && !row.mine;
   const dimmed = row.isDrafted || row.isKeeper || row.interest === "dislike";
   // Drop-target edge wins over a tier break line while a drag is in flight.
@@ -94,6 +112,13 @@ export function BoardRow({
       {last.owner === "Sean" ? "you" : last.owner} ${last.keeperPrice}
     </span>
   );
+  // Blue tag when this player is pinned to one of your draft slots.
+  const assignedTag = assignedLabel ? (
+    <span style={{ color: "#5B9BD5", fontWeight: 600 }} title={`Assigned to ${assignedLabel} on the Targets page`}>
+      {" · → "}
+      {assignedLabel}
+    </span>
+  ) : null;
 
   let liveAlertColor: string | null = null;
   let liveAlertLabel = "";
@@ -126,13 +151,14 @@ export function BoardRow({
         {nameClickable ? (
           <div
             {...handlers}
-            title="Click = Like, double-click = Love, press and hold = Dislike (click again to undo)"
+            ref={nameRef}
+            title="Click = Like, double-click = Love, press and hold = menu (dislike / assign to a slot)"
             style={{
               cursor: "pointer",
               borderRadius: 4,
               padding: "1px 3px",
               margin: "-1px -3px",
-              background: pressing ? "rgba(168, 58, 52, 0.35)" : "transparent",
+              background: pressing ? "rgba(232, 163, 61, 0.30)" : "transparent",
               transition: "background 0.1s ease",
               userSelect: "none",
               WebkitUserSelect: "none",
@@ -145,6 +171,7 @@ export function BoardRow({
             </div>
             <div style={styles.tdPlayerMeta}>
               ADP {row.adp}
+              {assignedTag}
               {keeperTag}
               {lastDraftTag}
             </div>
@@ -157,6 +184,7 @@ export function BoardRow({
             </div>
             <div style={styles.tdPlayerMeta}>
               ADP {row.adp}
+              {assignedTag}
               {keeperTag}
               {lastDraftTag}
             </div>
