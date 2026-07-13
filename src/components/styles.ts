@@ -349,6 +349,7 @@ export const styles: Record<string, CSSProperties> = {
     zIndex: 2,
     background: "#1C2128",
     minWidth: 120,
+    width: "99%",
     padding: "8px 4px",
     textAlign: "left",
     boxShadow: "2px 0 0 #2A2F38",
@@ -380,7 +381,9 @@ export const styles: Record<string, CSSProperties> = {
     zIndex: 1,
     background: "#171A20",
     minWidth: 120,
-    maxWidth: 150,
+    // Take the table's leftover width so the board fills the screen instead of
+    // leaving blank space on the right; the numeric columns stay content-sized.
+    width: "99%",
     padding: "6px 4px",
     textAlign: "left",
     boxShadow: "2px 0 0 #20242C",
@@ -392,7 +395,7 @@ export const styles: Record<string, CSSProperties> = {
     whiteSpace: "nowrap",
     overflow: "hidden",
     textOverflow: "ellipsis",
-    maxWidth: 150,
+    maxWidth: 320,
     textAlign: "left",
   },
   tdPlayerMeta: { fontSize: 10, color: "#8B92A0", marginTop: 1, textAlign: "left" },
