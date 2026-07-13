@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Ties are for Soccer — Auction War Room",
+  title: "Fantasy Football Draft Planner",
   description: "2026 superflex auction draft tool for Sean's league.",
 };
 
