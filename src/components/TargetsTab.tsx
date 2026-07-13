@@ -17,14 +17,14 @@ import { BoardRow } from "./BoardRow";
 import { styles } from "./styles";
 
 // Shopping bands around a cluster of similarly-priced slots:
-//   Reach  = one shelf above your price — grab only at a discount
-//   Target = squarely what your plan money buys
-//   Settle = the fallback shelf just below, if the room outbids you
-const REACH_HI = 1.8; // reach band ceiling (× cluster hi)
-const BAND_HI = 1.15; // target band ceiling (× cluster hi)
-const BAND_LO = 0.8; // target band floor (× cluster lo)
-const SETTLE_LO = 0.55; // settle band floor (× cluster lo)
-const MIN_GROUP = 7; // every cluster should offer at least this many names
+//   Reach  = the 5 cheapest players above your price — grab only at a discount
+//   Target = the best 5 your plan money buys
+//   Settle = the next 5 below, if the room outbids you
+// Fixed windows on the availability ladder (not price filters), so disliking or
+// losing a player always slides the next-closest one in — each band stays 5 deep
+// as long as the position has players left.
+const BAND_HI = 1.15; // where "your money buys him" starts (× cluster hi)
+const BAND_SIZE = 5;
 
 interface OpenSlot {
   id: string;
@@ -92,20 +92,16 @@ export function TargetsTab({ board, strategy, onPaid, onMeta, onRate }: TargetsT
       for (const slots of groups) {
         const hi = slots[0].amount;
         const lo = slots[slots.length - 1].amount;
-        const avail = availByPos[pos] ?? [];
-        const t = (r: BoardRowType) => r.target as number;
+        const avail = availByPos[pos] ?? []; // sorted by market price, best first
 
-        const reach = avail.filter((r) => t(r) > hi * BAND_HI && t(r) <= hi * REACH_HI).slice(-4);
-        const target = avail.filter((r) => t(r) >= lo * BAND_LO && t(r) <= hi * BAND_HI).slice(0, 8);
-        let settle = avail.filter((r) => t(r) >= Math.max(1, lo * SETTLE_LO) && t(r) < lo * BAND_LO).slice(0, 4);
+        // Anchor at the first player your ceiling affords; Target is the 5 from
+        // there down, Reach the 5 just above, Settle the 5 below Target.
+        let start = avail.findIndex((r) => (r.target as number) <= hi * BAND_HI);
+        if (start === -1) start = avail.length;
+        const reach = avail.slice(Math.max(0, start - BAND_SIZE), start);
+        const target = avail.slice(start, start + BAND_SIZE);
+        const settle = avail.slice(start + BAND_SIZE, start + 2 * BAND_SIZE);
 
-        // Thin market at this shelf: keep extending downward until the cluster
-        // offers enough names to guarantee landing one.
-        if (reach.length + target.length + settle.length < MIN_GROUP) {
-          const have = new Set([...reach, ...target, ...settle].map((r) => r.id));
-          const extra = avail.filter((r) => !have.has(r.id) && t(r) < lo * BAND_LO);
-          settle = [...settle, ...extra.slice(0, MIN_GROUP - reach.length - target.length - settle.length)];
-        }
         if (reach.length + target.length + settle.length > 0) out.push({ pos, slots, lo, hi, reach, target, settle });
       }
     });
@@ -157,10 +153,11 @@ export function TargetsTab({ board, strategy, onPaid, onMeta, onRate }: TargetsT
   return (
     <div>
       <div style={styles.emptyState}>
-        Shopping lists for <b>{strategy.name}</b>, built from who&apos;s actually available. <b>Reach</b> = the
-        shelf above your price — bid only if he&apos;s falling to you at a discount. <b>Target</b> = what your plan
-        money buys — go get one. <b>Settle</b> = the fallback shelf if the room outbids you. Rate, set max, and
-        enter prices right here — it&apos;s the same rows as the Board.
+        Shopping lists for <b>{strategy.name}</b>, built from who&apos;s actually available. <b>Reach</b> = the five
+        just above your price — bid only if one falls to you at a discount. <b>Target</b> = the best five your plan
+        money buys — go get one. <b>Settle</b> = the next five down if the room outbids you. Each band stays five
+        deep: dislike a player (press and hold his name) or lose him to another team and the next-closest slides in.
+        Rate, set max, and enter prices right here — it&apos;s the same rows as the Board.
       </div>
 
       <BudgetFlex slack={slack} budgetLeft={board.myBudgetRemaining} openPlanned={openPlanned} upgrades={upgrades} cuts={cuts} />
