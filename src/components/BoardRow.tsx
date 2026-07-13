@@ -1,6 +1,7 @@
 "use client";
 
 import { BoardRow as BoardRowType, Interest, POS_COLOR, tierColor } from "@/lib/draftLogic";
+import { LAST_DRAFT } from "@/lib/data/lastDraft";
 import { usePlayerRating } from "@/hooks/usePlayerRating";
 import { DragHandle } from "./DragHandle";
 import { styles } from "./styles";
@@ -71,6 +72,19 @@ export function BoardRow({
       {likelyKeeper.owner === "Sean" ? "you" : likelyKeeper.owner} ${likelyKeeper.cost}
     </span>
   );
+  // Subtle gray note: who rostered this player in 2025 and what keeping him
+  // would cost them (2025 salary + $5). Hidden when the orange keeper tag is
+  // showing — that already names the same owner and price.
+  const last = !likelyKeeper ? LAST_DRAFT[row.id] : undefined;
+  const lastDraftTag = last && (
+    <span
+      style={{ color: "#5B6270" }}
+      title={`${last.wasKeeper ? "Kept" : "Drafted"} by ${last.owner} for $${last.paid} in 2025 — keeper price $${last.keeperPrice}`}
+    >
+      {" · '25: "}
+      {last.owner === "Sean" ? "you" : last.owner} ${last.keeperPrice}
+    </span>
+  );
 
   let liveAlertColor: string | null = null;
   let liveAlertLabel = "";
@@ -120,6 +134,7 @@ export function BoardRow({
             <div style={styles.tdPlayerMeta}>
               {row.team ? row.team + " · " : ""}ADP {row.adp}
               {keeperTag}
+              {lastDraftTag}
             </div>
           </div>
         ) : (
@@ -128,6 +143,7 @@ export function BoardRow({
             <div style={styles.tdPlayerMeta}>
               {row.team ? row.team + " · " : ""}ADP {row.adp}
               {keeperTag}
+              {lastDraftTag}
             </div>
           </>
         )}
