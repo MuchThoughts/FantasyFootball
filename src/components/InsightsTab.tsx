@@ -20,12 +20,12 @@ export function InsightsTab({ keeperPicks, marketByUid, onToggleKeeper }: Insigh
       <div style={styles.emptyState}>
         Built from your league&apos;s 2023–2025 auction results and the official keeper sheet. Keeper costs shown
         are 2026 prices (last salary + $5, undrafted = $10); a player can only be kept two years running. Value =
-        market − keeper cost, where <b>market is the projected draft cost for the player&apos;s rank as shown on
-        the Board</b> — if the Board calls him RB18, market is what your league&apos;s RB18 slot has actually gone
-        for. Same rank, same raw draft-cost data as the Board&apos;s Act column. A checked keeper (who has no board
-        rank) is valued at the rank he&apos;d hold if thrown back into the pool. The checkboxes ARE the keeper
-        designation: checked players come off the board (tinted orange), their cost is committed against the
-        auction pool, and your own checks fill your strategy slots.
+        market − keeper cost, where <b>market is the projected draft cost for the player&apos;s absolute positional
+        rank</b> — if he&apos;s the RB19, market is what your league&apos;s RB19 slot has actually gone for. Ranks
+        never shift when players above are kept or drafted; it&apos;s the same rank and raw draft-cost data as the
+        Board&apos;s RK and Act columns. The checkboxes ARE the keeper designation: checked players come off the
+        board (tinted orange), their cost is committed against the auction pool, and your own checks fill your
+        strategy slots.
       </div>
       <LeagueBaseline />
       <div style={styles.list}>
@@ -241,7 +241,7 @@ function InsightCard({
                 <th style={{ fontWeight: 500, paddingBottom: 3 }}>Keeper</th>
                 <th
                   style={{ fontWeight: 500, paddingBottom: 3, cursor: "help" }}
-                  title="Projected draft cost for this player's rank as shown on the Board (checked keepers removed from the pool) — if the Board calls him RB18, this is what your league's RB18 slot has gone for. Same rank and data as the Board's Act column; a checked keeper is valued at the rank he'd hold if thrown back."
+                  title="Projected draft cost for this player's ABSOLUTE positional rank — if he's the RB19, this is what your league's RB19 slot has gone for. Ranks never shift when players above are kept or drafted. Same rank and data as the Board's RK and Act columns."
                 >
                   Market
                 </th>

@@ -180,20 +180,14 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
     [d.settings, keepers, d.drafted, allPlayers, d.playerMeta, d.tierOverrides, activeStrategy, activeInterest, sourceTiers]
   );
 
-  // Projected auction cost per player for the Insights keeper-value column, on
-  // the SAME rank basis as the board's RK/Act columns: rank among available
-  // players (checked keepers removed). If the board says a player is RB18, his
-  // market is what the league's RB18 slot has gone for. A checked keeper has no
-  // board rank, so he's valued at the rank he'd hold if thrown back into the pool.
+  // Projected auction cost per player for the Insights keeper-value column.
+  // Ranks are ABSOLUTE (the board's RK column — keepers occupy their slots and
+  // never promote anyone), so this is simply "the RB19 costs what the league's
+  // RB19 slot has gone for," identical to the board's Act column.
   const marketByUid = useMemo(() => {
     const m = new Map<string, number>();
     for (const r of board.rows) {
-      if (!r.isKeeper && r.effRank != null) m.set(r.id, rawCostAt(r.pos, r.effRank) ?? 1);
-    }
-    for (const r of board.rows) {
-      if (!r.isKeeper) continue;
-      const wouldBeRank = 1 + board.rows.filter((x) => x.pos === r.pos && !x.isKeeper && x.effRank != null && x.adp < r.adp).length;
-      m.set(r.id, rawCostAt(r.pos, wouldBeRank) ?? 1);
+      if (r.effRank != null) m.set(r.id, rawCostAt(r.pos, r.effRank) ?? 1);
     }
     return m;
   }, [board.rows]);

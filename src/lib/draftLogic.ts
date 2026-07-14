@@ -145,20 +145,6 @@ export function curveDollars(pos: string, effRank: number): number {
   return arr[arr.length - 1];
 }
 
-// Market price for every player with NOBODY kept: positional rank in ranking
-// order -> the league curve. The stable benchmark for keeper EV on the Insights
-// tab — checked keepers leave the board, so live board targets vanish for
-// exactly the players being evaluated.
-export function marketTargets(players: Player[]): Map<string, number> {
-  const posCounts: Record<string, number> = {};
-  const m = new Map<string, number>();
-  for (const p of [...players].sort((a, b) => a.adp - b.adp)) {
-    posCounts[p.pos] = (posCounts[p.pos] || 0) + 1;
-    m.set(uid(p.name), Math.max(Math.round(curveDollars(p.pos, posCounts[p.pos])), 1));
-  }
-  return m;
-}
-
 // suggest a $ amount for a slot based on how many earlier slots (in fixed array order)
 // already claim the same position — i.e. this slot's effective market rank at that position
 export function suggestSlotAmount(
@@ -328,29 +314,23 @@ export function computeBoard(
   const availablePool = Math.max(totalBudget - keeperCostSum, 1);
 
   const keptIds = new Set(Object.keys(keepers));
-  const available = allPlayers.filter((p) => !keptIds.has(uid(p.name)));
-  const keptPlayers = allPlayers.filter((p) => keptIds.has(uid(p.name)));
 
-  const sorted = [...available].sort((a, b) => a.adp - b.adp);
+  // Positional ranks are ABSOLUTE: every player (kept or not) occupies his rank
+  // in the full pool, and a keeper coming off the board does NOT promote the
+  // players below him. You pay for the player's absolute tier (the RB19 costs
+  // RB19 money), not his position in whatever pool happens to remain — shifting
+  // ranks would inflate mediocre players at a thinned-out position.
+  const sorted = [...allPlayers].sort((a, b) => a.adp - b.adp);
   const posCounts: Record<string, number> = {};
-  const rankedRows = sorted.map((p) => {
+  const rows = sorted.map((p) => {
     const pos = p.pos;
     posCounts[pos] = (posCounts[pos] || 0) + 1;
-    const effRank = posCounts[pos];
-    const target = Math.max(Math.round(curveDollars(pos, effRank)), 1);
-    return { id: uid(p.name), name: p.name, pos, team: p.team, adp: p.adp, effRank, target, isKeeper: false };
+    const effRank: number | null = posCounts[pos];
+    const isKeeper = keptIds.has(uid(p.name));
+    const target: number | null = isKeeper ? null : Math.max(Math.round(curveDollars(pos, effRank)), 1);
+    return { id: uid(p.name), name: p.name, pos, team: p.team, adp: p.adp, effRank, target, isKeeper };
   });
-  const keptRows = keptPlayers.map((p) => ({
-    id: uid(p.name),
-    name: p.name,
-    pos: p.pos,
-    team: p.team,
-    adp: p.adp,
-    effRank: null as number | null,
-    target: null as number | null,
-    isKeeper: true,
-  }));
-  const rows = [...rankedRows, ...keptRows].sort((a, b) => a.adp - b.adp);
+  const rankedRows = rows.filter((r) => !r.isKeeper);
 
   const draftedIds = new Set(
     Object.entries(drafted)
@@ -363,7 +343,7 @@ export function computeBoard(
     .filter(([id]) => draftedIds.has(id))
     .reduce((s, [, d]) => s + (Number(d.price) || 0), 0);
   const remainingPool = availablePool - moneySpentAuction;
-  const remainingTargetSum = undraftedRows.reduce((s, r) => s + r.target, 0);
+  const remainingTargetSum = undraftedRows.reduce((s, r) => s + (r.target ?? 0), 0);
   const inflation = remainingTargetSum > 0 ? remainingPool / remainingTargetSum : 1;
 
   const tierMap: Record<string, number> = {};
@@ -371,7 +351,9 @@ export function computeBoard(
   const positionCounts: Record<string, number> = {};
   const useSourceTiers = !!sourceTiers && Object.keys(sourceTiers).length > 0;
   POSITIONS.forEach((pos) => {
-    const posRows = rankedRows.filter((r) => r.pos === pos);
+    // Absolute rank space: keepers occupy their slots, so counts and tier
+    // breaks are over the full pool at the position.
+    const posRows = rows.filter((r) => r.pos === pos);
     const n = posRows.length;
     positionCounts[pos] = n;
 
@@ -393,7 +375,7 @@ export function computeBoard(
     posRows.forEach((r) => {
       let tier = 1;
       for (const b of breaks) {
-        if (r.effRank > b) tier++;
+        if ((r.effRank as number) > b) tier++;
         else break;
       }
       tierMap[r.id] = tier;
