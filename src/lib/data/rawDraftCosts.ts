@@ -1,6 +1,3 @@
-import { Player } from "./players";
-import { uid } from "../draftLogic";
-
 // Raw league draft costs by positional price rank, computed from the actual
 // 2023-2025 auction results (scratchpad drafts.json).
 //
@@ -32,20 +29,6 @@ export function rawCostAt(pos: string, rank: number | null | undefined): number 
   if (!rows || rows.length === 0) return null;
   const row = rows.find((r) => r.rank === rank) ?? rows[rows.length - 1];
   return Math.round(row.price);
-}
-
-// Projected auction cost for every player: their positional rank in the given
-// (nobody-kept) ranking mapped onto the raw draft-cost ladder. This is what a
-// player "would go for" this year — e.g. the QB15 costs whatever your league's
-// QB15 has cost — the basis for the Insights keeper-value column.
-export function rawCostTargets(players: Player[]): Map<string, number> {
-  const posCounts: Record<string, number> = {};
-  const m = new Map<string, number>();
-  for (const p of [...players].sort((a, b) => a.adp - b.adp)) {
-    posCounts[p.pos] = (posCounts[p.pos] || 0) + 1;
-    m.set(uid(p.name), rawCostAt(p.pos, posCounts[p.pos]) ?? 1);
-  }
-  return m;
 }
 
 export const RAW_DRAFT_COSTS: Record<string, RawCostRow[]> = {

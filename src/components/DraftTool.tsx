@@ -22,7 +22,7 @@ import {
   tierColor,
   uid,
 } from "@/lib/draftLogic";
-import { rawCostAt, rawCostTargets } from "@/lib/data/rawDraftCosts";
+import { rawCostAt } from "@/lib/data/rawDraftCosts";
 import { SlotMenu, SlotMenuState } from "./SlotMenu";
 import { BUILTIN_SOURCE_ID, BUILTIN_SOURCE_NAME, RankingConfig, RankingSource, applyRanking } from "@/lib/rankings";
 import { dropEdgeStyle, dropRank, useRowDrag } from "@/hooks/useRowDrag";
@@ -180,11 +180,23 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
     [d.settings, keepers, d.drafted, allPlayers, d.playerMeta, d.tierOverrides, activeStrategy, activeInterest, sourceTiers]
   );
 
-  // Projected auction cost per player — their TRUE positional rank (ignoring who's
-  // checked as a keeper) mapped onto the raw draft-cost ladder: "what will the
-  // QB15 go for this year." The basis for the Insights keeper-value column, and
-  // the same data as the board's Act column. Stable regardless of keeper checks.
-  const marketByUid = useMemo(() => rawCostTargets(allPlayers), [allPlayers]);
+  // Projected auction cost per player for the Insights keeper-value column, on
+  // the SAME rank basis as the board's RK/Act columns: rank among available
+  // players (checked keepers removed). If the board says a player is RB18, his
+  // market is what the league's RB18 slot has gone for. A checked keeper has no
+  // board rank, so he's valued at the rank he'd hold if thrown back into the pool.
+  const marketByUid = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const r of board.rows) {
+      if (!r.isKeeper && r.effRank != null) m.set(r.id, rawCostAt(r.pos, r.effRank) ?? 1);
+    }
+    for (const r of board.rows) {
+      if (!r.isKeeper) continue;
+      const wouldBeRank = 1 + board.rows.filter((x) => x.pos === r.pos && !x.isKeeper && x.effRank != null && x.adp < r.adp).length;
+      m.set(r.id, rawCostAt(r.pos, wouldBeRank) ?? 1);
+    }
+    return m;
+  }, [board.rows]);
 
   const strategySlots = useMemo(() => computeStrategySlots(activeStrategy), [activeStrategy]);
   const strategyTargets = useMemo(() => computeStrategyTargets(board, strategySlots), [board, strategySlots]);
