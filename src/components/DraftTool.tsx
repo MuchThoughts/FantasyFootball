@@ -16,14 +16,13 @@ import {
   expectedKeepers,
   fmtMoney,
   KEEPER_CANDIDATE_BY_UID,
-  marketTargets,
   POSITIONS,
   recommendStrategy,
   suggestSlotAmount,
   tierColor,
   uid,
 } from "@/lib/draftLogic";
-import { rawCostAt } from "@/lib/data/rawDraftCosts";
+import { rawCostAt, rawCostTargets } from "@/lib/data/rawDraftCosts";
 import { SlotMenu, SlotMenuState } from "./SlotMenu";
 import { BUILTIN_SOURCE_ID, BUILTIN_SOURCE_NAME, RankingConfig, RankingSource, applyRanking } from "@/lib/rankings";
 import { dropEdgeStyle, dropRank, useRowDrag } from "@/hooks/useRowDrag";
@@ -181,12 +180,11 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
     [d.settings, keepers, d.drafted, allPlayers, d.playerMeta, d.tierOverrides, activeStrategy, activeInterest, sourceTiers]
   );
 
-  // Open-market price per player — the league's 3-yr price at each player's TRUE
-  // 2026 positional rank, ignoring who's checked as a keeper. Deliberately not
-  // the Board's live Tgt (which recomputes ranks after removing kept players and
-  // therefore drifts as more get checked) — this stays stable and gives every
-  // Insights keeper candidate a price, including ones currently checked.
-  const marketByUid = useMemo(() => marketTargets(allPlayers), [allPlayers]);
+  // Projected auction cost per player — their TRUE positional rank (ignoring who's
+  // checked as a keeper) mapped onto the raw draft-cost ladder: "what will the
+  // QB15 go for this year." The basis for the Insights keeper-value column, and
+  // the same data as the board's Act column. Stable regardless of keeper checks.
+  const marketByUid = useMemo(() => rawCostTargets(allPlayers), [allPlayers]);
 
   const strategySlots = useMemo(() => computeStrategySlots(activeStrategy), [activeStrategy]);
   const strategyTargets = useMemo(() => computeStrategyTargets(board, strategySlots), [board, strategySlots]);

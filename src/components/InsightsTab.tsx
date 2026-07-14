@@ -19,14 +19,13 @@ export function InsightsTab({ keeperPicks, marketByUid, onToggleKeeper }: Insigh
       <CheckedKeepers keeperPicks={keeperPicks} />
       <div style={styles.emptyState}>
         Built from your league&apos;s 2023–2025 auction results and the official keeper sheet. Keeper costs shown
-        are 2026 prices (last salary + $5, undrafted = $10); a player can only be kept two years running. Keeper
-        values are judged against current 2026 rankings — target is your league&apos;s 3-yr price at the
-        player&apos;s true 2026 positional rank — e.g. if he&apos;s the RB10, it&apos;s what your league&apos;s RB10
-        has actually sold for — so trades, injuries, and role changes are priced in. This is deliberately different
-        from the Board&apos;s live Tgt column, which recomputes ranks after removing whoever&apos;s already checked
-        as kept, so it drifts as you check more players. The checkboxes ARE the keeper designation: checked players
-        come off the board (tinted orange), their cost is committed against the auction pool, and your own checks
-        fill your strategy slots.
+        are 2026 prices (last salary + $5, undrafted = $10); a player can only be kept two years running. Value =
+        market − keeper cost, where <b>market is the projected draft cost for that player&apos;s 2026 positional
+        rank</b> — e.g. if he&apos;s the QB15, it&apos;s what your league&apos;s QB15 has actually gone for (~$20),
+        so if you keep him at $15 you have $5 of value. It&apos;s the same raw draft-cost data as the board&apos;s
+        Act column, and it&apos;s stable no matter who else you check. The checkboxes ARE the keeper designation:
+        checked players come off the board (tinted orange), their cost is committed against the auction pool, and
+        your own checks fill your strategy slots.
       </div>
       <LeagueBaseline />
       <div style={styles.list}>
@@ -228,8 +227,8 @@ function InsightCard({
             </span>
           </div>
           <div style={{ fontSize: 10, color: "#5B6270", marginBottom: 6 }}>
-            Top 4 by value (market − keeper cost), where market is the open-market price for this player&apos;s true
-            2026 rank — not the Board&apos;s live Tgt (see the Market column&apos;s tooltip). Check the two you expect{" "}
+            Top 4 by value (market − keeper cost), where market is the projected draft cost for this player&apos;s
+            2026 positional rank (see the Market column&apos;s tooltip). Check the two you expect{" "}
             {isSean ? "to keep" : `${d.owner} to keep`} — checked players are treated as kept: off the board and
             their cost pre-committed.
           </div>
@@ -242,7 +241,7 @@ function InsightCard({
                 <th style={{ fontWeight: 500, paddingBottom: 3 }}>Keeper</th>
                 <th
                   style={{ fontWeight: 500, paddingBottom: 3, cursor: "help" }}
-                  title="Open-market price: your league's 3-yr price at this player's true 2026 positional rank (e.g. the RB10 costs what your league's RB10 has sold for) — NOT the Board's live Tgt, which shifts once keepers start coming off the pool."
+                  title="Projected draft cost: the raw draft-cost price for this player's 2026 positional rank (e.g. the QB15 costs what your league's QB15 has actually gone for). Same data as the board's Act column; stable no matter who else you check."
                 >
                   Market
                 </th>
