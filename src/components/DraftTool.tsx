@@ -23,6 +23,7 @@ import {
   uid,
 } from "@/lib/draftLogic";
 import { rawCostAt } from "@/lib/data/rawDraftCosts";
+import { FINISH_2025 } from "@/lib/data/finish2025";
 import { SlotMenu, SlotMenuState } from "./SlotMenu";
 import { BUILTIN_SOURCE_ID, BUILTIN_SOURCE_NAME, RankingConfig, RankingSource, applyRanking } from "@/lib/rankings";
 import { dropEdgeStyle, dropRank, useRowDrag } from "@/hooks/useRowDrag";
@@ -843,6 +844,9 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
                     Rk{sortKey === "adp" ? " ▾" : ""}
                   </th>
                   <th style={{ ...styles.th, ...styles.thSticky2, left: playerStickyLeft }}>Player</th>
+                  <th style={styles.th} title="Last season's positional finish (e.g. RB5 = finished as the RB5)">
+                    2025
+                  </th>
                   <th
                     style={{ ...styles.th, cursor: "pointer", color: sortKey === "tier" ? "#EDEEF0" : "#8B92A0" }}
                     onClick={() => setSortKey("tier")}
@@ -884,6 +888,7 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
                           playerStickyLeft={playerStickyLeft}
                           showPos={false}
                           actCost={rawCostAt(row.pos, row.effRank)}
+                          finish2025={FINISH_2025[row.id] ?? null}
                           assignedLabel={assignments[row.id] ? slotLabels.get(assignments[row.id])?.label ?? null : null}
                           onOpenMenu={(r, rect) =>
                             setSlotMenu({
@@ -907,7 +912,7 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
                         {breakIndex !== -1 && (
                           <TierDivider
                             pos={posFilter}
-                            colSpan={8}
+                            colSpan={9}
                             index={breakIndex}
                             rank={breaks[breakIndex]}
                             lower={breakIndex > 0 ? breaks[breakIndex - 1] + 1 : 1}

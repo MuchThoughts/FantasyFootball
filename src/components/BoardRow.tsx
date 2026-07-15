@@ -28,6 +28,9 @@ interface BoardRowProps {
   // When defined, render an "Act" cell (actual historical draft cost for this
   // pos+rank) just left of Tgt. undefined = no Act column at all.
   actCost?: number | null;
+  // When defined, render a "2025" cell (last season's positional finish, e.g.
+  // "RB5") right after Player. undefined = no 2025 column at all.
+  finish2025?: string | null;
   // Press-and-hold opens the assign/dislike menu; the parent renders it anchored
   // to the returned rect. When absent, hold falls back to toggling Dislike.
   onOpenMenu?: (row: BoardRowType, rect: { top: number; bottom: number; left: number }) => void;
@@ -51,6 +54,7 @@ export function BoardRow({
   showPos = true,
   showPaid = true,
   actCost,
+  finish2025,
   onOpenMenu,
   assignedLabel,
   onPaid,
@@ -191,6 +195,14 @@ export function BoardRow({
           </>
         )}
       </td>
+      {finish2025 !== undefined && (
+        <td
+          style={{ ...styles.td, ...styles.tdMono, ...tBreakStyle, ...bgStyle, fontSize: 11, color: "#8B92A0" }}
+          title={finish2025 ? `Finished 2025 as the ${finish2025}` : "No 2025 finish (rookie or missed season)"}
+        >
+          {finish2025 ?? "—"}
+        </td>
+      )}
       {showPos && (
         <td style={{ ...styles.td, ...tBreakStyle, ...bgStyle }}>
           <span style={{ ...styles.posTagSm, background: POS_COLOR[row.pos] }}>{row.pos}</span>
