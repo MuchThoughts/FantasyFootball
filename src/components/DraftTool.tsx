@@ -24,6 +24,7 @@ import {
 } from "@/lib/draftLogic";
 import { rawCostAt } from "@/lib/data/rawDraftCosts";
 import { FINISH_2025 } from "@/lib/data/finish2025";
+import { points2025ForFinish } from "@/lib/data/points2025";
 import { SlotMenu, SlotMenuState } from "./SlotMenu";
 import { BUILTIN_SOURCE_ID, BUILTIN_SOURCE_NAME, RankingConfig, RankingSource, applyRanking } from "@/lib/rankings";
 import { dropEdgeStyle, dropRank, useRowDrag } from "@/hooks/useRowDrag";
@@ -516,6 +517,13 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
     update(() => defaultDraftData());
   }, [update]);
 
+  // Wipe every Paid entry (all drafted state) without touching keepers,
+  // ratings, max prices, or strategies — for re-running a mock draft.
+  const clearDraft = useCallback(() => {
+    if (!window.confirm("Clear all Paid prices and drafted marks? Keepers, ratings, and strategies are kept.")) return;
+    update((prev) => ({ ...prev, drafted: {} }));
+  }, [update]);
+
   const setSlotPos = useCallback(
     (strategyId: string, slotId: string, newPos: string) => {
       update((prev) => ({
@@ -583,14 +591,14 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
     [update]
   );
 
-  // Reset one strategy back to a clean slate: clear its like/dislike ratings and
-  // restore its slot prices (a preset returns to its shipped slots; a custom one
-  // re-derives amounts from the market curve). Keepers are global, so untouched.
-  // Also clears manual tier bars so the board's tiers re-derive from the reset
-  // prices, matching the behavior when you switch strategies.
+  // Reset one strategy's slot prices (a preset returns to its shipped slots; a
+  // custom one re-derives amounts from the market curve). Likes/dislikes and
+  // keepers are always kept. Also clears manual tier bars so the board's tiers
+  // re-derive from the reset prices, matching the behavior when you switch
+  // strategies.
   const resetStrategy = useCallback(
     (id: string) => {
-      if (!window.confirm("Reset this strategy's like/dislike ratings and slot prices? Keepers are unaffected.")) return;
+      if (!window.confirm("Reset this strategy's slot prices to the defaults? Likes/dislikes and keepers are kept.")) return;
       update((prev) => {
         const preset = DEFAULT_STRATEGIES.find((s) => s.id === id);
         const strategies = prev.strategies.map((s) => {
@@ -598,10 +606,8 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
           if (preset) return { ...s, slots: preset.slots.map((sl) => ({ ...sl })) };
           return { ...s, slots: s.slots.map((sl, i) => ({ ...sl, amount: suggestSlotAmount(s.slots, i, sl.pos) })) };
         });
-        const interestByStrategy = { ...prev.interestByStrategy };
-        delete interestByStrategy[id];
         const tierOverrides = prev.activeStrategyId === id ? {} : prev.tierOverrides;
-        return { ...prev, strategies, interestByStrategy, tierOverrides };
+        return { ...prev, strategies, tierOverrides };
       });
     },
     [update]
@@ -771,6 +777,13 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
             <button style={styles.smallBtn} onClick={() => setShowAddPlayer((s) => !s)}>
               + Player
             </button>
+            <button
+              style={styles.smallBtn}
+              title="Erase every Paid price and drafted mark — keepers, ratings, and strategies are kept"
+              onClick={clearDraft}
+            >
+              Clear Draft
+            </button>
           </div>
 
           {showAddPlayer && (
@@ -847,6 +860,9 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
                   <th style={styles.th} title="Last season's positional finish (e.g. RB5 = finished as the RB5)">
                     2025
                   </th>
+                  <th style={styles.th} title="2025 season fantasy point total">
+                    Pts
+                  </th>
                   <th
                     style={{ ...styles.th, cursor: "pointer", color: sortKey === "tier" ? "#EDEEF0" : "#8B92A0" }}
                     onClick={() => setSortKey("tier")}
@@ -889,6 +905,7 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
                           showPos={false}
                           actCost={rawCostAt(row.pos, row.effRank)}
                           finish2025={FINISH_2025[row.id] ?? null}
+                          pts2025={points2025ForFinish(FINISH_2025[row.id])}
                           assignedLabel={assignments[row.id] ? slotLabels.get(assignments[row.id])?.label ?? null : null}
                           onOpenMenu={(r, rect) =>
                             setSlotMenu({
@@ -912,7 +929,7 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
                         {breakIndex !== -1 && (
                           <TierDivider
                             pos={posFilter}
-                            colSpan={9}
+                            colSpan={10}
                             index={breakIndex}
                             rank={breaks[breakIndex]}
                             lower={breakIndex > 0 ? breaks[breakIndex - 1] + 1 : 1}

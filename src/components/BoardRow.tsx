@@ -31,6 +31,8 @@ interface BoardRowProps {
   // When defined, render a "2025" cell (last season's positional finish, e.g.
   // "RB5") right after Player. undefined = no 2025 column at all.
   finish2025?: string | null;
+  // When defined, render a "Pts" cell (2025 season FPTS total) after 2025.
+  pts2025?: number | null;
   // Press-and-hold opens the assign/dislike menu; the parent renders it anchored
   // to the returned rect. When absent, hold falls back to toggling Dislike.
   onOpenMenu?: (row: BoardRowType, rect: { top: number; bottom: number; left: number }) => void;
@@ -55,6 +57,7 @@ export function BoardRow({
   showPaid = true,
   actCost,
   finish2025,
+  pts2025,
   onOpenMenu,
   assignedLabel,
   onPaid,
@@ -203,6 +206,14 @@ export function BoardRow({
           {finish2025 ?? "—"}
         </td>
       )}
+      {pts2025 !== undefined && (
+        <td
+          style={{ ...styles.td, ...styles.tdMono, ...tBreakStyle, ...bgStyle, fontSize: 11, color: "#8B92A0" }}
+          title={pts2025 != null ? "2025 season fantasy point total" : "No 2025 points (rookie or missed season)"}
+        >
+          {pts2025 != null ? pts2025.toFixed(1).replace(/\.0$/, "") : "—"}
+        </td>
+      )}
       {showPos && (
         <td style={{ ...styles.td, ...tBreakStyle, ...bgStyle }}>
           <span style={{ ...styles.posTagSm, background: POS_COLOR[row.pos] }}>{row.pos}</span>
@@ -245,6 +256,13 @@ export function BoardRow({
           type="number"
           value={row.max}
           onChange={(e) => onMeta(row.id, "max", e.target.value)}
+          onFocus={(e) => {
+            // Start from the target price instead of 0, pre-selected so typing
+            // replaces it outright.
+            const el = e.target as HTMLInputElement;
+            if (row.max === "" && row.target != null) onMeta(row.id, "max", String(row.target));
+            requestAnimationFrame(() => el.select());
+          }}
         />
       </td>
       {showPaid && (
@@ -258,6 +276,11 @@ export function BoardRow({
               value={row.paid}
               placeholder="—"
               onChange={(e) => onPaid(row, e.target.value)}
+              onFocus={(e) => {
+                const el = e.target as HTMLInputElement;
+                if (row.paid === "" && row.target != null) onPaid(row, String(row.target));
+                requestAnimationFrame(() => el.select());
+              }}
             />
           )}
         </td>

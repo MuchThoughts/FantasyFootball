@@ -394,8 +394,12 @@ export function TargetsTab({
       )}
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginTop: 10 }}>
-        <button style={{ ...styles.smallBtn, width: "auto" }} onClick={() => onReset(strategy.id)}>
-          Reset ratings &amp; prices
+        <button
+          style={{ ...styles.smallBtn, width: "auto" }}
+          title="Restore this strategy's slot prices to the defaults — likes/dislikes and keepers are kept"
+          onClick={() => onReset(strategy.id)}
+        >
+          Reset prices
         </button>
         <button style={{ ...styles.dangerBtn, width: "auto" }} onClick={() => onDelete(strategy.id)}>
           Delete strategy
