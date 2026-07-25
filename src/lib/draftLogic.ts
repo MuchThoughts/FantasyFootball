@@ -212,6 +212,10 @@ export interface DraftData {
   // A player pinned to a slot surfaces in that slot's Targets section (set via
   // the board's press-and-hold menu).
   assignmentsByStrategy: Record<string, Record<string, string>>;
+  // Free-text scouting notes per player uid. Keyed by player (not rank or
+  // strategy), so they survive ranking uploads, strategy resets, and profile
+  // resets — they're your own research, never derived data.
+  notes: Record<string, string>;
   // Uploaded ranking lists plus which source/blend/overrides are active —
   // see rankings.ts. The active ranking drives board order and price targets.
   rankingSources: RankingSource[];

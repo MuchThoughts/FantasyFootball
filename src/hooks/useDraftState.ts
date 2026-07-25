@@ -18,6 +18,7 @@ export function defaultDraftData(): DraftData {
     activeStrategyId: "preset-balanced",
     keeperPicks: {},
     assignmentsByStrategy: {},
+    notes: {},
     rankingSources: [],
     ranking: defaultRankingConfig(),
   };

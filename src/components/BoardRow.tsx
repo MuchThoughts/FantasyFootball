@@ -36,6 +36,9 @@ interface BoardRowProps {
   // Press-and-hold opens the assign/dislike menu; the parent renders it anchored
   // to the returned rect. When absent, hold falls back to toggling Dislike.
   onOpenMenu?: (row: BoardRowType, rect: { top: number; bottom: number; left: number }) => void;
+  // When given, show a notes icon beside the name that opens the note editor.
+  onOpenNote?: (row: BoardRowType, rect: { top: number; bottom: number; left: number }) => void;
+  note?: string;
   // The slot this player is pinned to (position-ordinal label), shown as a tag.
   assignedLabel?: string | null;
   onPaid: (row: BoardRowType, value: string) => void;
@@ -59,12 +62,16 @@ export function BoardRow({
   finish2025,
   pts2025,
   onOpenMenu,
+  onOpenNote,
+  note,
   assignedLabel,
   onPaid,
   onMeta,
   onRate,
 }: BoardRowProps) {
   const nameRef = useRef<HTMLDivElement>(null);
+  const noteRef = useRef<HTMLButtonElement>(null);
+  const hasNote = !!note && note.trim().length > 0;
   const onHold = onOpenMenu
     ? () => {
         const el = nameRef.current;
@@ -155,48 +162,78 @@ export function BoardRow({
       </td>
       {zoneCells}
       <td style={{ ...styles.td, ...styles.tdSticky2, ...tBreakStyle, ...stickyBg, left: playerStickyLeft }}>
-        {nameClickable ? (
-          <div
-            {...handlers}
-            ref={nameRef}
-            title="Click = Like, double-click = Love, press and hold = menu (dislike / assign to a slot)"
-            style={{
-              cursor: "pointer",
-              borderRadius: 4,
-              padding: "1px 3px",
-              margin: "-1px -3px",
-              background: pressing ? "rgba(232, 163, 61, 0.30)" : "transparent",
-              transition: "background 0.1s ease",
-              userSelect: "none",
-              WebkitUserSelect: "none",
-              touchAction: "manipulation",
-            }}
-          >
-            <div style={styles.tdPlayerName}>
-              {row.name}
-              {row.team && <span style={{ color: "#7A828F", fontWeight: 400, fontSize: 11 }}> {row.team}</span>}
-            </div>
-            <div style={styles.tdPlayerMeta}>
-              ADP {row.adp}
-              {assignedTag}
-              {keeperTag}
-              {lastDraftTag}
-            </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            {nameClickable ? (
+              <div
+                {...handlers}
+                ref={nameRef}
+                title="Click = Like, double-click = Love, press and hold = menu (dislike / assign to a slot)"
+                style={{
+                  cursor: "pointer",
+                  borderRadius: 4,
+                  padding: "1px 3px",
+                  margin: "-1px -3px",
+                  background: pressing ? "rgba(232, 163, 61, 0.30)" : "transparent",
+                  transition: "background 0.1s ease",
+                  userSelect: "none",
+                  WebkitUserSelect: "none",
+                  touchAction: "manipulation",
+                }}
+              >
+                <div style={styles.tdPlayerName}>
+                  {row.name}
+                  {row.team && <span style={{ color: "#7A828F", fontWeight: 400, fontSize: 11 }}> {row.team}</span>}
+                </div>
+                <div style={styles.tdPlayerMeta}>
+                  ADP {row.adp}
+                  {assignedTag}
+                  {keeperTag}
+                  {lastDraftTag}
+                </div>
+              </div>
+            ) : (
+              <>
+                <div style={styles.tdPlayerName}>
+                  {row.name}
+                  {row.team && <span style={{ color: "#7A828F", fontWeight: 400, fontSize: 11 }}> {row.team}</span>}
+                </div>
+                <div style={styles.tdPlayerMeta}>
+                  ADP {row.adp}
+                  {assignedTag}
+                  {keeperTag}
+                  {lastDraftTag}
+                </div>
+              </>
+            )}
           </div>
-        ) : (
-          <>
-            <div style={styles.tdPlayerName}>
-              {row.name}
-              {row.team && <span style={{ color: "#7A828F", fontWeight: 400, fontSize: 11 }}> {row.team}</span>}
-            </div>
-            <div style={styles.tdPlayerMeta}>
-              ADP {row.adp}
-              {assignedTag}
-              {keeperTag}
-              {lastDraftTag}
-            </div>
-          </>
-        )}
+          {onOpenNote && (
+            // Sibling of the rating handlers, so tapping the icon never marks
+            // a Like. Filled + blue once the player has a note.
+            <button
+              ref={noteRef}
+              onClick={(e) => {
+                e.stopPropagation();
+                const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                onOpenNote(row, { top: r.top, bottom: r.bottom, left: r.left });
+              }}
+              onPointerDown={(e) => e.stopPropagation()}
+              title={hasNote ? `Note: ${note}` : "Add a note"}
+              style={{
+                flexShrink: 0,
+                background: "transparent",
+                border: "none",
+                cursor: "pointer",
+                padding: "2px 3px",
+                fontSize: 12,
+                lineHeight: 1,
+                color: hasNote ? "#5B9BD5" : "#3A3F4A",
+              }}
+            >
+              {hasNote ? "▤" : "▢"}
+            </button>
+          )}
+        </div>
       </td>
       {finish2025 !== undefined && (
         <td

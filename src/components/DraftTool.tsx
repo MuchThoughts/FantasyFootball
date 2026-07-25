@@ -26,6 +26,7 @@ import { rawCostAt } from "@/lib/data/rawDraftCosts";
 import { FINISH_2025 } from "@/lib/data/finish2025";
 import { points2025ForFinish } from "@/lib/data/points2025";
 import { SlotMenu, SlotMenuState } from "./SlotMenu";
+import { NoteEditor, NoteEditorState } from "./NoteEditor";
 import { BUILTIN_SOURCE_ID, BUILTIN_SOURCE_NAME, RankingConfig, RankingSource, applyRanking } from "@/lib/rankings";
 import { dropEdgeStyle, dropRank, useRowDrag } from "@/hooks/useRowDrag";
 import { useProfiles } from "@/hooks/useProfiles";
@@ -164,6 +165,8 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
 
   // Press-and-hold assign/dislike menu (board). Session-only.
   const [slotMenu, setSlotMenu] = useState<SlotMenuState | null>(null);
+  // Open player-notes editor. Session-only; the notes themselves persist.
+  const [noteEditor, setNoteEditor] = useState<NoteEditorState | null>(null);
 
   // Keepers are derived, not stored: the Insights checkboxes (keeperPicks over
   // the built-in defaults) are the only keeper designation in the app.
@@ -311,6 +314,20 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
         if (value === "neutral") delete map[id];
         else map[id] = value;
         return { ...prev, interestByStrategy: { ...prev.interestByStrategy, [prev.activeStrategyId]: map } };
+      });
+    },
+    [update]
+  );
+
+  // Scouting notes are per player and global to the profile — never cleared by
+  // resets or ranking uploads. An emptied note drops out of storage entirely.
+  const setNote = useCallback(
+    (playerId: string, text: string) => {
+      update((prev) => {
+        const notes = { ...(prev.notes ?? {}) };
+        if (text.trim() === "") delete notes[playerId];
+        else notes[playerId] = text;
+        return { ...prev, notes };
       });
     },
     [update]
@@ -513,8 +530,10 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
   }, [addForm, update]);
 
   const resetAll = useCallback(() => {
-    if (!window.confirm("Reset all draft picks, keeper picks, and settings for this profile? This can't be undone.")) return;
-    update(() => defaultDraftData());
+    if (!window.confirm("Reset all draft picks, keeper picks, and settings for this profile? Your player notes are kept. This can't be undone.")) return;
+    // Player notes are hand-written research, not draft state — they survive
+    // even a full profile reset.
+    update((prev) => ({ ...defaultDraftData(), notes: prev.notes ?? {} }));
   }, [update]);
 
   // Wipe every Paid entry (all drafted state) without touching keepers,
@@ -917,6 +936,10 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
                               rect,
                             })
                           }
+                          note={(d.notes ?? {})[row.id]}
+                          onOpenNote={(r, rect) =>
+                            setNoteEditor({ playerId: r.id, playerName: r.name, pos: r.pos, rect })
+                          }
                           isTarget={strategyTargets.targetIds.has(row.id)}
                           dragEnabled={boardDragEnabled}
                           dragging={boardDrag?.id === row.id}
@@ -1008,6 +1031,15 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
             setSlotMenu(null);
           }}
           onClose={() => setSlotMenu(null)}
+        />
+      )}
+
+      {noteEditor && (
+        <NoteEditor
+          note={noteEditor}
+          value={(d.notes ?? {})[noteEditor.playerId] ?? ""}
+          onChange={(text) => setNote(noteEditor.playerId, text)}
+          onClose={() => setNoteEditor(null)}
         />
       )}
 
