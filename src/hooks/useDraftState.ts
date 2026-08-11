@@ -2,14 +2,13 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import { DraftData, Interest, defaultSettings } from "@/lib/draftLogic";
+import { DraftData, Interest, KEEPER_CANDIDATE_BY_UID, defaultSettings } from "@/lib/draftLogic";
 import { DEFAULT_STRATEGIES, LEGACY_STRATEGIES } from "@/lib/data/strategies";
 import { defaultRankingConfig } from "@/lib/rankings";
 
 export function defaultDraftData(): DraftData {
   return {
     settings: defaultSettings(),
-    keepers: {},
     drafted: {},
     playerMeta: {},
     interestByStrategy: {},
@@ -17,6 +16,9 @@ export function defaultDraftData(): DraftData {
     customPlayers: [],
     strategies: DEFAULT_STRATEGIES,
     activeStrategyId: "preset-balanced",
+    keeperPicks: {},
+    assignmentsByStrategy: {},
+    notes: {},
     rankingSources: [],
     ranking: defaultRankingConfig(),
   };
@@ -36,13 +38,27 @@ function migrateInterest(state: DraftData): DraftData {
   return { ...state, interestByStrategy: { [state.activeStrategyId]: legacy } };
 }
 
+// Keepers used to be a stored map (set via the board's old Status dropdown);
+// they're now derived from keeperPicks + the Insights candidate list. Fold any
+// legacy keeper entries that match a known candidate into keeperPicks (entries
+// for unknown players had no owner and are dropped), then strip the dead field.
+function migrateKeepers(state: DraftData & { keepers?: Record<string, unknown> }): DraftData {
+  const { keepers: legacy, ...rest } = state;
+  if (!legacy || Object.keys(legacy).length === 0) return rest;
+  const keeperPicks = { ...rest.keeperPicks };
+  for (const id of Object.keys(legacy)) {
+    if (KEEPER_CANDIDATE_BY_UID[id]) keeperPicks[id] = true;
+  }
+  return { ...rest, keeperPicks };
+}
+
 // Roll saved states forward onto the current preset list: presets the user never
-// touched (they still exactly match the legacy defaults they shipped as) are swapped
-// for their refreshed versions, new presets are added, and anything customized —
-// including edited copies of retired presets — is preserved untouched.
+// touched (they still exactly match some shipped generation in LEGACY_STRATEGIES)
+// are swapped for their refreshed versions, new presets are added, and anything
+// customized — including edited copies of retired presets — is preserved untouched.
 function migrateStrategies(state: DraftData): DraftData {
-  const legacyById = new Map(LEGACY_STRATEGIES.map((s) => [s.id, canonicalJson(s)]));
-  const kept = (state.strategies || []).filter((s) => legacyById.get(s.id) !== canonicalJson(s));
+  const legacyJson = new Set(LEGACY_STRATEGIES.map((s) => canonicalJson(s)));
+  const kept = (state.strategies || []).filter((s) => !legacyJson.has(canonicalJson(s)));
   const keptIds = new Set(kept.map((s) => s.id));
   const missingDefaults = DEFAULT_STRATEGIES.filter((d) => !keptIds.has(d.id));
 
@@ -107,7 +123,7 @@ export function useDraftState(profileId: string | null) {
       if (cancelled) return;
 
       if (row && row.state && Object.keys(row.state as object).length > 0) {
-        const merged = migrateStrategies(migrateInterest({ ...defaultDraftData(), ...(row.state as Partial<DraftData>) }));
+        const merged = migrateKeepers(migrateStrategies(migrateInterest({ ...defaultDraftData(), ...(row.state as Partial<DraftData>) })));
         lastSyncedJson.current = canonicalJson(merged);
         setData(merged);
       } else {
@@ -132,7 +148,7 @@ export function useDraftState(profileId: string | null) {
         (payload) => {
           const newState = (payload.new as { state?: Partial<DraftData> } | null)?.state;
           if (!newState) return;
-          const merged = migrateStrategies(migrateInterest({ ...defaultDraftData(), ...newState }));
+          const merged = migrateKeepers(migrateStrategies(migrateInterest({ ...defaultDraftData(), ...newState })));
           const json = canonicalJson(merged);
           if (json === lastSyncedJson.current) return; // echo of our own write
           lastSyncedJson.current = json;

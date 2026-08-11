@@ -1,4 +1,4 @@
-# Ties are for Soccer — Auction War Room
+# Fantasy Football Draft Planner
 
 A live auction-draft cheat sheet for a 12-team, 2QB/superflex, half-PPR keeper league. Tracks live prices vs.
 league-specific historical targets, tiers, keepers, and per-team draft strategy — synced in real time across

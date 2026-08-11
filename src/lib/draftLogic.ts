@@ -1,3 +1,4 @@
+import { OWNER_INSIGHTS } from "./data/drafters";
 import { Player } from "./data/players";
 import { PRICE_CURVE } from "./data/priceCurve";
 import { Strategy } from "./data/strategies";
@@ -34,8 +35,95 @@ export function slotLabel(id: string): string {
   return id.slice(0, -1).toUpperCase() + id.slice(-1);
 }
 
+export interface SlotLabel {
+  slotId: string;
+  label: string; // position-ordinal name, e.g. "QB1", "RB3", "QB3 Bench"
+  amount: number;
+  pos: string;
+  bench: boolean;
+}
+
+// Name each slot by its position and price-rank within that position, tagging
+// bench slots: a $7 QB behind $30/$21 QBs becomes "QB3 Bench". These labels drive
+// the Targets sections and the board's assign-to-slot menu.
+export function buildSlotLabels(strategy: { slots: { id: string; pos: string; amount: number }[] } | undefined): Map<string, SlotLabel> {
+  const map = new Map<string, SlotLabel>();
+  if (!strategy) return map;
+  const byPos: Record<string, { id: string; amount: number }[]> = {};
+  strategy.slots.forEach((sl) => {
+    (byPos[sl.pos] = byPos[sl.pos] || []).push({ id: sl.id, amount: Number(sl.amount) || 0 });
+  });
+  for (const pos of Object.keys(byPos)) {
+    byPos[pos]
+      .sort((a, b) => b.amount - a.amount || a.id.localeCompare(b.id))
+      .forEach((s, i) => {
+        const bench = s.id.startsWith("bench");
+        map.set(s.id, { slotId: s.id, label: `${pos}${i + 1}${bench ? " Bench" : ""}`, amount: s.amount, pos, bench });
+      });
+  }
+  return map;
+}
+
 export function uid(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+// Players a league-mate might keep, drawn from the Insights keeper options.
+// Ineligible players (already kept twice) are never listed there, so they
+// correctly stay in the pool. `likelyDefault` is the built-in guess (the
+// ★-flagged options); the user can override it per player on the Insights tab.
+// The effective set tints rows pale orange as a "probably won't be available at
+// auction" warning.
+export interface LikelyKeeper {
+  owner: string;
+  cost: number;
+}
+export interface KeeperCandidate extends LikelyKeeper {
+  uid: string;
+  player: string;
+  pos: string;
+  likelyDefault: boolean;
+}
+
+// The app user's owner name in the Insights data — their checked keepers count
+// as "mine" (fill strategy slots, spend their budget).
+export const MY_OWNER = "Sean";
+
+export const KEEPER_CANDIDATES: KeeperCandidate[] = OWNER_INSIGHTS.flatMap((o) =>
+  o.keeperOptions.map((k) => ({
+    uid: uid(k.player),
+    player: k.player,
+    pos: k.pos,
+    owner: o.owner,
+    cost: k.cost,
+    likelyDefault: !!k.likely,
+  }))
+);
+
+// A player is on exactly one owner's roster, so keying candidates by uid is safe.
+export const KEEPER_CANDIDATE_BY_UID: Record<string, KeeperCandidate> = {};
+for (const c of KEEPER_CANDIDATES) KEEPER_CANDIDATE_BY_UID[c.uid] = c;
+
+// Effective "expected keeper" = the user's per-player override if set, else the
+// built-in likely default.
+export function isExpectedKeeper(playerUid: string, picks: Record<string, boolean>): boolean {
+  const override = picks[playerUid];
+  if (override !== undefined) return override;
+  return KEEPER_CANDIDATE_BY_UID[playerUid]?.likelyDefault ?? false;
+}
+
+// The Insights checkboxes ARE the keeper designation: every checked candidate
+// becomes a real keeper entry (off the board, cost pre-committed against the
+// auction pool, mine = it's on your roster). This is the only keeper source —
+// the old per-player status dropdown is gone.
+export function expectedKeepers(picks: Record<string, boolean>): Record<string, KeeperEntry> {
+  const out: Record<string, KeeperEntry> = {};
+  for (const c of KEEPER_CANDIDATES) {
+    if (isExpectedKeeper(c.uid, picks)) {
+      out[c.uid] = { name: c.player, pos: c.pos as Pos, cost: c.cost, mine: c.owner === MY_OWNER };
+    }
+  }
+  return out;
 }
 
 export function fmtMoney(n: number): string {
@@ -106,7 +194,6 @@ export interface PlayerMetaEntry {
 
 export interface DraftData {
   settings: Settings;
-  keepers: Record<string, KeeperEntry>;
   drafted: Record<string, DraftedEntry>;
   playerMeta: Record<string, PlayerMetaEntry>;
   // Interest ratings (love/like/dislike) are scoped per strategy: playerId -> interest,
@@ -116,6 +203,19 @@ export interface DraftData {
   customPlayers: Player[];
   strategies: Strategy[];
   activeStrategyId: string;
+  // THE keeper source of truth: which players you expect each league-mate (and
+  // you) to keep, as an override map keyed by player uid: true = keeper, false =
+  // explicitly not, absent = use the built-in likely default. Checked players
+  // become real keepers via expectedKeepers(); edited on the Insights tab.
+  keeperPicks: Record<string, boolean>;
+  // Curated slot assignments per strategy: strategyId -> (playerUid -> slotId).
+  // A player pinned to a slot surfaces in that slot's Targets section (set via
+  // the board's press-and-hold menu).
+  assignmentsByStrategy: Record<string, Record<string, string>>;
+  // Free-text scouting notes per player uid. Keyed by player (not rank or
+  // strategy), so they survive ranking uploads, strategy resets, and profile
+  // resets — they're your own research, never derived data.
+  notes: Record<string, string>;
   // Uploaded ranking lists plus which source/blend/overrides are active —
   // see rankings.ts. The active ranking drives board order and price targets.
   rankingSources: RankingSource[];
@@ -143,6 +243,9 @@ export interface BoardRow {
   live: number | null;
   max: number | "";
   interest: Interest;
+  // On keeper rows: who's keeping the player and at what cost (from the Insights
+  // candidate data). Null on regular rows.
+  likelyKeeper: LikelyKeeper | null;
 }
 
 export interface Board {
@@ -204,7 +307,10 @@ export function computeBoard(
   playerMeta: Record<string, PlayerMetaEntry>,
   tierOverrides: Record<string, number[]>,
   activeStrategy: Strategy | undefined,
-  activeInterest: Record<string, Interest>
+  activeInterest: Record<string, Interest>,
+  // When the active ranking supplies its own tiers (an uploaded list with a tier
+  // column), use those directly; otherwise tiers are derived from strategy prices.
+  sourceTiers?: Record<string, number>
 ): Board {
   const totalBudget = settings.teams * settings.budget;
   const keeperList = Object.entries(keepers).map(([id, k]) => ({ id, ...k }));
@@ -212,29 +318,23 @@ export function computeBoard(
   const availablePool = Math.max(totalBudget - keeperCostSum, 1);
 
   const keptIds = new Set(Object.keys(keepers));
-  const available = allPlayers.filter((p) => !keptIds.has(uid(p.name)));
-  const keptPlayers = allPlayers.filter((p) => keptIds.has(uid(p.name)));
 
-  const sorted = [...available].sort((a, b) => a.adp - b.adp);
+  // Positional ranks are ABSOLUTE: every player (kept or not) occupies his rank
+  // in the full pool, and a keeper coming off the board does NOT promote the
+  // players below him. You pay for the player's absolute tier (the RB19 costs
+  // RB19 money), not his position in whatever pool happens to remain — shifting
+  // ranks would inflate mediocre players at a thinned-out position.
+  const sorted = [...allPlayers].sort((a, b) => a.adp - b.adp);
   const posCounts: Record<string, number> = {};
-  const rankedRows = sorted.map((p) => {
+  const rows = sorted.map((p) => {
     const pos = p.pos;
     posCounts[pos] = (posCounts[pos] || 0) + 1;
-    const effRank = posCounts[pos];
-    const target = Math.max(Math.round(curveDollars(pos, effRank)), 1);
-    return { id: uid(p.name), name: p.name, pos, team: p.team, adp: p.adp, effRank, target, isKeeper: false };
+    const effRank: number | null = posCounts[pos];
+    const isKeeper = keptIds.has(uid(p.name));
+    const target: number | null = isKeeper ? null : Math.max(Math.round(curveDollars(pos, effRank)), 1);
+    return { id: uid(p.name), name: p.name, pos, team: p.team, adp: p.adp, effRank, target, isKeeper };
   });
-  const keptRows = keptPlayers.map((p) => ({
-    id: uid(p.name),
-    name: p.name,
-    pos: p.pos,
-    team: p.team,
-    adp: p.adp,
-    effRank: null as number | null,
-    target: null as number | null,
-    isKeeper: true,
-  }));
-  const rows = [...rankedRows, ...keptRows].sort((a, b) => a.adp - b.adp);
+  const rankedRows = rows.filter((r) => !r.isKeeper);
 
   const draftedIds = new Set(
     Object.entries(drafted)
@@ -247,16 +347,27 @@ export function computeBoard(
     .filter(([id]) => draftedIds.has(id))
     .reduce((s, [, d]) => s + (Number(d.price) || 0), 0);
   const remainingPool = availablePool - moneySpentAuction;
-  const remainingTargetSum = undraftedRows.reduce((s, r) => s + r.target, 0);
+  const remainingTargetSum = undraftedRows.reduce((s, r) => s + (r.target ?? 0), 0);
   const inflation = remainingTargetSum > 0 ? remainingPool / remainingTargetSum : 1;
 
   const tierMap: Record<string, number> = {};
   const tierBreaksUsed: Record<string, number[]> = {};
   const positionCounts: Record<string, number> = {};
+  const useSourceTiers = !!sourceTiers && Object.keys(sourceTiers).length > 0;
   POSITIONS.forEach((pos) => {
-    const posRows = rankedRows.filter((r) => r.pos === pos);
+    // Absolute rank space: keepers occupy their slots, so counts and tier
+    // breaks are over the full pool at the position.
+    const posRows = rows.filter((r) => r.pos === pos);
     const n = posRows.length;
     positionCounts[pos] = n;
+
+    if (useSourceTiers) {
+      // Tiers come from the uploaded ranking. No draggable break bars — the
+      // divider lines are drawn wherever the uploaded tier changes.
+      tierBreaksUsed[pos] = [];
+      posRows.forEach((r) => (tierMap[r.id] = sourceTiers![r.id] ?? 0));
+      return;
+    }
 
     // Presence of the key (even an empty array, meaning "all bars manually removed")
     // means the user has taken manual control of this position's tiers; absence means
@@ -268,7 +379,7 @@ export function computeBoard(
     posRows.forEach((r) => {
       let tier = 1;
       for (const b of breaks) {
-        if (r.effRank > b) tier++;
+        if ((r.effRank as number) > b) tier++;
         else break;
       }
       tierMap[r.id] = tier;
@@ -289,6 +400,9 @@ export function computeBoard(
         live: null,
         max: meta.max ?? "",
         interest: activeInterest[r.id] ?? "neutral",
+        // Keeper rows keep their owner/cost info so the board can label who's
+        // taking the player out of the pool.
+        likelyKeeper: KEEPER_CANDIDATE_BY_UID[r.id] ?? null,
       };
     }
     const d = drafted[r.id];
@@ -304,6 +418,7 @@ export function computeBoard(
       live,
       max: meta.max ?? "",
       interest: activeInterest[r.id] ?? "neutral",
+      likelyKeeper: null,
     };
   });
 
@@ -352,24 +467,85 @@ export function computeStrategySlots(strategy: Strategy | undefined): Record<Pos
   return slots;
 }
 
+// Assign each of "my" rostered players (keepers, and drafted players when passed)
+// to the strategy slot at its position whose planned target price is closest to
+// what the player cost — so a keeper priced like an RB2/RB3 fills that slot rather
+// than always landing in RB1. Greedy closest-pair-first; ties favor the earlier
+// (pricier) slot. Shared by the Strategy tab's slot table, the Board's target-zone
+// brackets, and the strategy recommender so all agree on which slots are filled.
+export function assignKeepersToSlots(strategy: Strategy | undefined, myKeepers: BoardRow[]): Map<string, BoardRow> {
+  const map = new Map<string, BoardRow>();
+  if (!strategy) return map;
+
+  const slotsByPos: Record<string, { id: string; amount: number }[]> = {};
+  strategy.slots.forEach((sl) => {
+    (slotsByPos[sl.pos] = slotsByPos[sl.pos] || []).push({ id: sl.id, amount: Number(sl.amount) || 0 });
+  });
+  const keepersByPos: Record<string, BoardRow[]> = {};
+  myKeepers.forEach((k) => {
+    (keepersByPos[k.pos] = keepersByPos[k.pos] || []).push(k);
+  });
+
+  Object.entries(keepersByPos).forEach(([pos, keepers]) => {
+    const slots = slotsByPos[pos] || [];
+    // Every keeper/slot pairing, ranked by how close the keeper's cost is to
+    // the slot's target price; greedily take the closest pair first so each
+    // keeper lands in its best-fitting open slot.
+    const pairs: { ki: number; si: number; diff: number }[] = [];
+    keepers.forEach((k, ki) => {
+      const cost = Number(k.keeperCost) || Number(k.paid) || 0;
+      slots.forEach((s, si) => pairs.push({ ki, si, diff: Math.abs(s.amount - cost) }));
+    });
+    pairs.sort((a, b) => a.diff - b.diff);
+    const usedK = new Set<number>();
+    const usedS = new Set<number>();
+    pairs.forEach(({ ki, si }) => {
+      if (usedK.has(ki) || usedS.has(si)) return;
+      usedK.add(ki);
+      usedS.add(si);
+      map.set(slots[si].id, keepers[ki]);
+    });
+  });
+  return map;
+}
+
+export interface StrategyZone {
+  slotId: string;
+  label: string; // slot role, e.g. "RB2", "FLEX 1", "Bench 3"
+  amount: number; // the slot's planned $
+  ids: string[]; // the ~5 available players priced nearest that $
+}
+
+// The Strategy tab's per-slot target lists (the 5 available players priced nearest
+// each slot's planned $) for one position — exposed so the Board can bracket those
+// ranges alongside the table. Keeper-filled and $0 slots produce no zone.
+export function computeStrategyZones(rows: BoardRow[], strategy: Strategy | undefined, pos: string): StrategyZone[] {
+  if (!strategy) return [];
+  const keeperSlots = assignKeepersToSlots(
+    strategy,
+    rows.filter((r) => r.isKeeper && r.mine)
+  );
+  const candidates = rows.filter(
+    (r) => r.pos === pos && r.target != null && !r.isDrafted && !r.isKeeper && r.interest !== "dislike"
+  );
+  return strategy.slots
+    .filter((sl) => sl.pos === pos && !keeperSlots.has(sl.id) && (Number(sl.amount) || 0) > 0)
+    .map((sl) => {
+      const amt = Number(sl.amount) || 0;
+      const ids = [...candidates]
+        .sort((a, b) => Math.abs((a.target as number) - amt) - Math.abs((b.target as number) - amt))
+        .slice(0, 5)
+        .map((r) => r.id);
+      return { slotId: sl.id, label: slotLabel(sl.id), amount: amt, ids };
+    })
+    .filter((z) => z.ids.length > 0);
+}
+
 export interface StrategyTargets {
   targetIds: Set<string>;
   sums: Record<string, number>;
   listByPos: Record<string, BoardRow[]>;
 }
-
-// Single combined dropdown covering both draft/keeper ownership and scouting interest —
-// a player is either an ownership state (Mine/Keeper/My Keeper) or an interest rating
-// (Love/Like/Dislike), never both at once, so one value suffices.
-export const STATUS_OPTIONS = [
-  { value: "", label: "Open", color: "#3A3F4A", text: "#C9CCD2" },
-  { value: "love", label: "Love", color: "#2E7D46", text: "#EDEEF0" },
-  { value: "like", label: "Like", color: "#4C8F5B", text: "#EDEEF0" },
-  { value: "dislike", label: "Dislike", color: "#A83A34", text: "#EDEEF0" },
-  { value: "mine", label: "Mine", color: "#3B6FA0", text: "#EDEEF0" },
-  { value: "keeper", label: "Keeper", color: "#8A5A2E", text: "#EDEEF0" },
-  { value: "keeper-mine", label: "My Keeper", color: "#5B3F8A", text: "#EDEEF0" },
-] as const;
 
 // A player whose league-history target is at least this much counts as "top talent"
 // for the stars-vs-depth market signal.
@@ -411,54 +587,125 @@ export function computeMarketRead(board: Board): MarketRead {
   };
 }
 
+// One slot-level observation from evaluating a strategy against the live market.
+export interface StrategyNote {
+  text: string;
+  kind: "hot" | "cheap" | "depleted"; // overpriced band / discounted band / tier is gone
+}
+
+// How one strategy holds up under current prices, over its still-open slots only.
+export interface StrategyEval {
+  // Estimated $ over (+) or under (−) plan to fill this strategy's open slots at
+  // today's prices, including downgrade losses from depleted tiers.
+  extraCost: number;
+  notes: StrategyNote[]; // biggest slot-level issues/advantages, largest impact first
+}
+
 export interface StrategyRecommendation {
   bestId: string;
   bestName: string;
   margin: number; // score gap between best and the active strategy, in budget fraction
-  reasons: string[];
+  reasons: string[]; // market-wide signals (position/star inflation)
   // Qualitative advice from the stars signal, shown even when no strategy in the list
   // is configured top-heavy enough for the scores to separate on that axis.
   hint: string | null;
   scores: Record<string, number>;
+  evals: Record<string, StrategyEval>;
 }
 
-// Scores each strategy against the market read: a strategy is favored when its budget
-// is weighted toward positions/tiers the room is underpaying for, and away from where
-// it's overpaying. Score units ≈ fraction of budget saved vs. paying target everywhere.
+const clampRatio = (r: number) => Math.min(Math.max(r, 0.5), 2);
+
+/*
+ * Scores each strategy by how executable its plan still is, slot by slot:
+ *
+ *  - For every slot my roster hasn't filled yet, ask how players priced like that
+ *    slot are actually selling — paid/target across sold players in a band around
+ *    the slot's planned $ (so $50+ QBs going wild hurts Hero QB without touching
+ *    Value QB's $20–27 slots). With no band data yet, fall back to the position
+ *    ratio, then the overall ratio, dampened toward 1 since the evidence is only
+ *    circumstantial for this band.
+ *  - If the quality tier a slot relies on is gone from the board entirely (best
+ *    remaining player prices far below the plan), the slot can only downgrade:
+ *    half the gap counts as lost value (the other half of the budget re-deploys).
+ *
+ * Score ≈ fraction of budget saved (+) or bled (−) vs. executing the plan at
+ * target prices. The best-scoring strategy is the recommendation.
+ */
 export function recommendStrategy(
+  board: Board,
   read: MarketRead,
   strategies: Strategy[],
-  activeStrategyId: string
+  activeStrategyId: string,
+  budget: number
 ): StrategyRecommendation | null {
   if (read.samples < MIN_MARKET_SAMPLES || strategies.length < 2) return null;
 
-  const scores: Record<string, number> = {};
-  for (const s of strategies) {
-    const total = s.slots.reduce((sum, sl) => sum + (Number(sl.amount) || 0), 0) || 1;
-    let expectedCost = 0;
-    POSITIONS.forEach((pos) => {
-      const share = s.slots.filter((sl) => sl.pos === pos).reduce((sum, sl) => sum + (Number(sl.amount) || 0), 0) / total;
-      const p = read.posInflation[pos];
-      const infl = p && p.n >= MIN_SIGNAL_SAMPLES ? p.ratio : read.overall;
-      expectedCost += share * infl;
-    });
-    let score = 1 - expectedCost;
-    if (read.stars && read.stars.n >= MIN_SIGNAL_SAMPLES) {
-      // Reward/punish budget concentration in star-priced slots on top of the position
-      // signal — this is what separates Stars & Scrubs from a balanced build.
-      const starsShare =
-        s.slots.filter((sl) => (Number(sl.amount) || 0) >= STAR_TARGET_MIN).reduce((sum, sl) => sum + (Number(sl.amount) || 0), 0) /
-        total;
-      score += 0.6 * starsShare * (1 - read.stars.ratio);
+  const sold = board.rows.filter((r) => !r.isKeeper && r.isDrafted && r.target != null && r.paid !== "");
+  const availByPos: Record<string, BoardRow[]> = {};
+  POSITIONS.forEach((pos) => {
+    availByPos[pos] = board.rows.filter((r) => r.pos === pos && !r.isDrafted && !r.isKeeper && r.target != null);
+  });
+  const myFilled = [...board.myKeepers, ...board.myDrafted];
+  const fmtDelta = (ratio: number) => `${ratio >= 1 ? "+" : "−"}${Math.abs(Math.round((ratio - 1) * 100))}%`;
+
+  // How players priced like this slot are actually selling. Returns the ratio to
+  // apply plus how many sold players directly back it (n from the band itself).
+  const bandRatio = (pos: string, amt: number): { ratio: number; n: number } => {
+    const band = sold.filter((r) => r.pos === pos && (r.target as number) >= amt * 0.6 && (r.target as number) <= amt * 1.7);
+    if (band.length >= MIN_SIGNAL_SAMPLES) {
+      const t = band.reduce((s, r) => s + (Number(r.target) || 0), 0);
+      if (t > 0) return { ratio: clampRatio(band.reduce((s, r) => s + (Number(r.paid) || 0), 0) / t), n: band.length };
     }
-    scores[s.id] = score;
+    const posSig = read.posInflation[pos as Pos];
+    if (posSig && posSig.n >= MIN_SIGNAL_SAMPLES) return { ratio: clampRatio(1 + (posSig.ratio - 1) * 0.5), n: 0 };
+    return { ratio: clampRatio(1 + (read.overall - 1) * 0.3), n: 0 };
+  };
+
+  const scores: Record<string, number> = {};
+  const evals: Record<string, StrategyEval> = {};
+  for (const s of strategies) {
+    const filledSlots = assignKeepersToSlots(s, myFilled);
+    const noted: (StrategyNote & { impact: number })[] = [];
+    let extra = 0; // $ over plan across open slots
+    for (const sl of s.slots) {
+      if (filledSlots.has(sl.id)) continue;
+      const amt = Number(sl.amount) || 0;
+      if (amt < 1) continue;
+      const pool = availByPos[sl.pos] || [];
+      const bestAvail = pool.reduce((m, r) => Math.max(m, Number(r.target) || 0), 0);
+
+      if (amt >= 8 && bestAvail < amt * 0.6) {
+        // The tier this slot planned to buy is sold out — forced downgrade.
+        const loss = (amt - bestAvail) * 0.5;
+        extra += loss;
+        noted.push({
+          text: `${slotLabel(sl.id)}: no ${sl.pos}s left near $${amt} — best remaining ~$${bestAvail}`,
+          kind: "depleted",
+          impact: loss,
+        });
+        continue;
+      }
+
+      const { ratio, n } = bandRatio(sl.pos, amt);
+      const loss = amt * (ratio - 1);
+      extra += loss;
+      if (n >= MIN_SIGNAL_SAMPLES && Math.abs(ratio - 1) >= 0.12 && amt >= 5) {
+        noted.push({
+          text: `${slotLabel(sl.id)} ($${amt} planned) projects ~$${Math.max(Math.round(amt * ratio), 1)} — ${sl.pos}s in that range going ${fmtDelta(ratio)} (${n} sold)`,
+          kind: ratio > 1 ? "hot" : "cheap",
+          impact: Math.abs(loss),
+        });
+      }
+    }
+    scores[s.id] = -extra / (budget || 200);
+    noted.sort((a, b) => b.impact - a.impact);
+    evals[s.id] = { extraCost: Math.round(extra), notes: noted.slice(0, 4).map(({ text, kind }) => ({ text, kind })) };
   }
 
   let best = strategies[0];
   for (const s of strategies) if (scores[s.id] > scores[best.id]) best = s;
 
   const reasons: string[] = [];
-  const fmtDelta = (ratio: number) => `${ratio >= 1 ? "+" : "−"}${Math.abs(Math.round((ratio - 1) * 100))}%`;
   const posSignals = POSITIONS.filter((pos) => {
     const p = read.posInflation[pos];
     return p && p.n >= MIN_SIGNAL_SAMPLES && Math.abs(p.ratio - 1) >= 0.08;
@@ -477,7 +724,7 @@ export function recommendStrategy(
   }
 
   const activeScore = scores[activeStrategyId] ?? scores[best.id];
-  return { bestId: best.id, bestName: best.name, margin: scores[best.id] - activeScore, reasons, hint, scores };
+  return { bestId: best.id, bestName: best.name, margin: scores[best.id] - activeScore, reasons, hint, scores, evals };
 }
 
 export function computeStrategyTargets(board: Board, strategySlots: Record<Pos, number>): StrategyTargets {

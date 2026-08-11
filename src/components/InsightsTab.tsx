@@ -1,112 +1,312 @@
 "use client";
 
-import { DrafterTeam } from "@/lib/data/drafters";
-import { POS_COLOR, POSITIONS } from "@/lib/draftLogic";
+import { LEAGUE_AVG, OWNER_INSIGHTS, OwnerInsight } from "@/lib/data/drafters";
+import { isExpectedKeeper, KEEPER_CANDIDATES, POS_COLOR, POSITIONS, uid } from "@/lib/draftLogic";
 import { styles } from "./styles";
 
-type DrafterRow = DrafterTeam & { team: string };
-
 interface InsightsTabProps {
-  rows: DrafterRow[];
+  // Per-player override map: uid -> expected-keeper boolean. Absent = use default.
+  keeperPicks: Record<string, boolean>;
+  // Open-market price per player uid (league's 3-yr price at their true 2026
+  // positional rank, ignoring keepers) — drives EV = market − keeper cost.
+  marketByUid: Map<string, number>;
+  onToggleKeeper: (playerUid: string, next: boolean) => void;
 }
 
-export function InsightsTab({ rows }: InsightsTabProps) {
-  const timings = rows.map((d) => d.spendTiming).filter((v) => v != null) as number[];
-  const meanT = timings.reduce((s, v) => s + v, 0) / (timings.length || 1);
-  const sdT = Math.sqrt(timings.reduce((s, v) => s + (v - meanT) ** 2, 0) / (timings.length || 1)) || 1;
-
+export function InsightsTab({ keeperPicks, marketByUid, onToggleKeeper }: InsightsTabProps) {
   return (
     <div>
+      <CheckedKeepers keeperPicks={keeperPicks} />
       <div style={styles.emptyState}>
-        Based on {rows[0]?.years === 2 ? "2024–2025" : "2025"} auction data from your league — trends and
-        tendencies, not a log of who they bought.
+        Built from your league&apos;s 2023–2025 auction results and the official keeper sheet. Keeper costs shown
+        are 2026 prices (last salary + $5, undrafted = $10); a player can only be kept two years running. Value =
+        market − keeper cost, where <b>market is the projected draft cost for the player&apos;s absolute positional
+        rank</b> — if he&apos;s the RB19, market is what your league&apos;s RB19 slot has actually gone for. Ranks
+        never shift when players above are kept or drafted; it&apos;s the same rank and raw draft-cost data as the
+        Board&apos;s RK and Act columns. The checkboxes ARE the keeper designation: checked players come off the
+        board (tinted orange), their cost is committed against the auction pool, and your own checks fill your
+        strategy slots.
       </div>
+      <LeagueBaseline />
       <div style={styles.list}>
-        {rows.map((d) => (
-          <InsightCard key={d.team} d={d} meanTiming={meanT} sdTiming={sdT} />
+        {OWNER_INSIGHTS.map((d) => (
+          <InsightCard key={d.owner} d={d} keeperPicks={keeperPicks} marketByUid={marketByUid} onToggleKeeper={onToggleKeeper} />
         ))}
       </div>
     </div>
   );
 }
 
-function InsightCard({ d, meanTiming, sdTiming }: { d: DrafterRow; meanTiming: number; sdTiming: number }) {
+// Every keeper you've checked across all owners, grouped by position — a running
+// picture of who's leaving the auction pool (and at what keeper cost, which we
+// already know from the sheet, so nothing here needs to be typed in).
+function CheckedKeepers({ keeperPicks }: { keeperPicks: Record<string, boolean> }) {
+  const picked = KEEPER_CANDIDATES.filter((c) => isExpectedKeeper(c.uid, keeperPicks));
+  const groups = POSITIONS.map((p) => ({ pos: p, list: picked.filter((c) => c.pos === p) })).filter(
+    (g) => g.list.length > 0
+  );
+
+  return (
+    <div style={{ ...styles.playerCard, marginBottom: 6 }}>
+      <div style={{ fontSize: 11, color: "#8B92A0", marginBottom: 6, fontWeight: 600, letterSpacing: 0.4 }}>
+        KEEPERS YOU&apos;VE CHECKED{" "}
+        <span style={{ color: "#5B6270", fontWeight: 400 }}>· {picked.length} across the league</span>
+      </div>
+      {groups.length === 0 ? (
+        <div style={{ fontSize: 12, color: "#5B6270" }}>
+          None yet — check the boxes in each owner&apos;s Keeper Watch below and they&apos;ll collect here.
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {groups.map((g) => (
+            <div key={g.pos} style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
+              <span style={{ ...styles.posTagSm, background: POS_COLOR[g.pos], flexShrink: 0 }}>{g.pos}</span>
+              <span style={{ display: "flex", gap: 12, flexWrap: "wrap", fontSize: 12.5, color: "#EDEEF0" }}>
+                {g.list.map((c) => (
+                  <span key={c.uid}>
+                    {c.player}{" "}
+                    <span style={{ color: "#8B92A0", fontSize: 11 }}>
+                      {c.owner === "Sean" ? "you" : c.owner}{" "}
+                      <span style={{ fontFamily: "'IBM Plex Mono', monospace" }}>${c.cost}</span>
+                    </span>
+                  </span>
+                ))}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LeagueBaseline() {
+  return (
+    <div style={{ ...styles.playerCard, marginBottom: 6 }}>
+      <div style={{ fontSize: 11, color: "#8B92A0", marginBottom: 6, fontWeight: 600, letterSpacing: 0.4 }}>
+        LEAGUE BASELINE (3-YR AVG)
+      </div>
+      <div style={{ display: "flex", gap: 14, flexWrap: "wrap", fontSize: 12, color: "#EDEEF0" }}>
+        <span>
+          Picks to $120: <b>{LEAGUE_AVG.picksTo120}</b>
+        </span>
+        <span>
+          $1 fliers/yr: <b>{LEAGUE_AVG.onesPerYear}</b>
+        </span>
+        <span style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {POSITIONS.map((p) => (
+            <span key={p}>
+              <span style={{ color: POS_COLOR[p] }}>{p}</span> {LEAGUE_AVG.posShare[p]}%
+            </span>
+          ))}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function StatTile({ label, value, hint }: { label: string; value: string; hint?: string }) {
+  return (
+    <div style={{ minWidth: 86 }}>
+      <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 15, fontWeight: 600, color: "#EDEEF0" }}>
+        {value}
+      </div>
+      <div style={{ fontSize: 10, color: "#8B92A0" }}>{label}</div>
+      {hint && <div style={{ fontSize: 10, color: "#5B6270" }}>{hint}</div>}
+    </div>
+  );
+}
+
+function InsightCard({
+  d,
+  keeperPicks,
+  marketByUid,
+  onToggleKeeper,
+}: {
+  d: OwnerInsight;
+  keeperPicks: Record<string, boolean>;
+  marketByUid: Map<string, number>;
+  onToggleKeeper: (playerUid: string, next: boolean) => void;
+}) {
   const isSean = d.owner === "Sean";
 
-  const z = d.spendTiming != null ? (d.spendTiming - meanTiming) / sdTiming : 0;
-  let timingLabel: string;
-  let timingColor: string;
-  if (z <= -0.75) {
-    timingLabel = "Front-loads spending — buys their stars early in the draft";
-    timingColor = "#E8A33D";
-  } else if (z >= 0.75) {
-    timingLabel = "Patient — holds budget and buys later than most";
-    timingColor = "#5B9BD5";
-  } else {
-    timingLabel = "Even pace — spends steadily through the draft";
-    timingColor = "#8B92A0";
-  }
-
-  let splashLabel: string;
-  if (d.top3Share >= 55) {
-    splashLabel = `Stars & scrubs — ${d.top3Share}% of their budget goes to just 3 players`;
-  } else if (d.top3Share <= 35) {
-    splashLabel = `Patient value — spreads budget evenly, rarely makes a big splash`;
-  } else {
-    splashLabel = `Moderate mix — a couple of stars, then fills out the roster with value`;
-  }
-
-  const posOverpay = d.posOverpay || {};
-  const premiums = Object.entries(posOverpay)
-    .filter(([, v]) => v >= 20)
-    .sort((a, b) => b[1] - a[1]);
-  const bargains = Object.entries(posOverpay)
-    .filter(([, v]) => v <= -20)
-    .sort((a, b) => a[1] - b[1]);
+  // Rank this owner's keeper options by expected value (market − keeper cost)
+  // and show the best 4; that's where their two keeps almost certainly come from.
+  const ranked = d.keeperOptions
+    .map((k) => {
+      const id = uid(k.player);
+      const market = marketByUid.get(id) ?? null;
+      return { ...k, id, market, ev: market != null ? market - k.cost : null };
+    })
+    .sort((a, b) => (b.ev ?? -Infinity) - (a.ev ?? -Infinity));
+  const topKeepers = ranked.slice(0, 4);
+  const selectedCount = ranked.filter((k) => isExpectedKeeper(k.id, keeperPicks)).length;
 
   return (
     <div style={{ ...styles.playerCard, borderColor: isSean ? "#4CAF6B" : "#2A2F38" }}>
       <div style={styles.playerRowTop}>
         <div style={styles.playerInfo}>
           <div style={styles.playerName}>
-            {d.team} {isSean && <span style={styles.mineTag}>YOU</span>}
+            {d.owner} {isSean && <span style={styles.mineTag}>YOU</span>}
           </div>
           <div style={styles.playerMeta}>
-            {d.owner ? d.owner + " · " : ""}
-            {d.nPicks} picks tracked
+            {d.team}
+            {d.teamHistory ? ` · ${d.teamHistory}` : ""}
           </div>
         </div>
         <div style={styles.priceCol}>
-          <div style={styles.targetPrice}>
-            {d.avgOverpayPct > 0 ? "overpays" : "underpays"} {Math.abs(d.avgOverpayPct)}% on average
+          <div style={{ fontSize: 11, fontWeight: 600, color: "#E8A33D" }}>{d.archetype}</div>
+          <div style={{ fontSize: 10, color: "#8B92A0" }}>
+            max ever: {d.maxEver.player} ${d.maxEver.price} (&rsquo;{String(d.maxEver.year).slice(2)})
           </div>
         </div>
       </div>
-      <div style={styles.expandPanel}>
-        <div style={{ fontSize: 12, color: timingColor, fontWeight: 600 }}>{timingLabel}</div>
-        <div style={{ fontSize: 12, color: "#8B92A0" }}>{splashLabel}</div>
 
-        {premiums.length > 0 && (
-          <div style={{ fontSize: 12, color: "#E1524B" }}>
-            Pays up at: {premiums.map(([p, v]) => `${p} (+${Math.round(v)}%)`).join(", ")}
-          </div>
-        )}
-        {bargains.length > 0 && (
-          <div style={{ fontSize: 12, color: "#4CAF6B" }}>
-            Finds value at: {bargains.map(([p, v]) => `${p} (${Math.round(v)}%)`).join(", ")}
-          </div>
-        )}
+      <div style={styles.expandPanel}>
+        <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+          <StatTile
+            label="picks to $120"
+            value={d.picksTo120.toFixed(1)}
+            hint={d.picksTo120 <= 3.2 ? "top-heavy" : d.picksTo120 >= 3.9 ? "spreads it" : "typical"}
+          />
+          <StatTile label="$1 fliers / yr" value={d.onesPerYear.toFixed(1)} hint={`league ${LEAGUE_AVG.onesPerYear}`} />
+          <StatTile label="top-3 budget share" value={`${d.top3Share}%`} />
+          <StatTile label="spent by nom. rd 4" value={`${d.earlyShare}%`} />
+        </div>
 
         <div style={styles.allocRow}>
-          {POSITIONS.map((p) => (
-            <div key={p} style={styles.allocChip}>
-              <span style={{ color: POS_COLOR[p] }}>{p}</span> {d.posSpend[p]}%
+          {POSITIONS.map((p) => {
+            const delta = d.posDelta[p] ?? 0;
+            const big = Math.abs(delta) >= 3;
+            const deltaColor = !big ? "#5B6270" : delta > 0 ? "#E1524B" : "#4CAF6B";
+            return (
+              <div key={p} style={styles.allocChip}>
+                <span style={{ color: POS_COLOR[p] }}>{p}</span> {d.posShare[p]}%{" "}
+                <span style={{ color: deltaColor, fontSize: 10 }}>
+                  {delta > 0 ? "+" : ""}
+                  {delta}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{ fontSize: 10, color: "#5B6270" }}>
+          Share of budget by position · red = pays over league average, green = leaves the position cheap
+        </div>
+
+        <div>
+          {d.reads.map((r, i) => (
+            <div key={i} style={{ fontSize: 12, color: "#C6CAD2", marginBottom: 4, display: "flex", gap: 6 }}>
+              <span style={{ color: "#E8A33D", flexShrink: 0 }}>▸</span>
+              <span>{r}</span>
             </div>
           ))}
         </div>
-        <div style={{ fontSize: 11, color: "#8B92A0" }}>
-          {d.keepers2025} keeper{d.keepers2025 === 1 ? "" : "s"} entering 2025 · biggest single buy was{" "}
-          {d.biggestBuyShare}% of their total spend
+
+        {d.loyalty.length > 0 && (
+          <div style={{ fontSize: 11, color: "#8B92A0" }}>
+            Comes back to: <span style={{ color: "#C6CAD2" }}>{d.loyalty.join(", ")}</span>
+          </div>
+        )}
+
+        <div style={{ borderTop: "1px solid #2A2F38", paddingTop: 8 }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "baseline",
+              justifyContent: "space-between",
+              gap: 8,
+              marginBottom: 6,
+            }}
+          >
+            <span style={{ fontSize: 11, fontWeight: 600, color: "#5B9BD5" }}>
+              2026 KEEPER WATCH <span style={{ color: "#5B6270", fontWeight: 400 }}>· kept {d.keeperHistory}</span>
+            </span>
+            <span style={{ fontSize: 10, color: selectedCount === 2 ? "#8FCB9E" : "#E8A33D" }}>
+              {selectedCount}/2 picked
+            </span>
+          </div>
+          <div style={{ fontSize: 10, color: "#5B6270", marginBottom: 6 }}>
+            Top 4 by value (market − keeper cost), where market is the projected draft cost for this player&apos;s
+            2026 positional rank (see the Market column&apos;s tooltip). Check the two you expect{" "}
+            {isSean ? "to keep" : `${d.owner} to keep`} — checked players are treated as kept: off the board and
+            their cost pre-committed.
+          </div>
+
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+            <thead>
+              <tr style={{ color: "#5B6270", fontSize: 10, textAlign: "right" }}>
+                <th style={{ width: 22 }} />
+                <th style={{ textAlign: "left", fontWeight: 500, paddingBottom: 3 }}>Player</th>
+                <th style={{ fontWeight: 500, paddingBottom: 3 }}>Keeper</th>
+                <th
+                  style={{ fontWeight: 500, paddingBottom: 3, cursor: "help" }}
+                  title="Projected draft cost for this player's ABSOLUTE positional rank — if he's the RB19, this is what your league's RB19 slot has gone for. Ranks never shift when players above are kept or drafted. Same rank and data as the Board's RK and Act columns."
+                >
+                  Market
+                </th>
+                <th style={{ fontWeight: 500, paddingBottom: 3, paddingLeft: 8 }}>Value</th>
+              </tr>
+            </thead>
+            <tbody>
+              {topKeepers.map((k) => {
+                const checked = isExpectedKeeper(k.id, keeperPicks);
+                const evColor = k.ev == null ? "#5B6270" : k.ev >= 0 ? "#4CAF6B" : "#E1524B";
+                return (
+                  <tr
+                    key={k.player}
+                    title={k.note}
+                    onClick={() => onToggleKeeper(k.id, !checked)}
+                    style={{
+                      cursor: "pointer",
+                      background: checked ? "rgba(232, 163, 61, 0.16)" : "transparent",
+                    }}
+                  >
+                    <td style={{ textAlign: "center", padding: "3px 0" }}>
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) => onToggleKeeper(k.id, e.target.checked)}
+                        onClick={(e) => e.stopPropagation()}
+                        style={{ cursor: "pointer", accentColor: "#E8A33D" }}
+                      />
+                    </td>
+                    <td style={{ textAlign: "left", padding: "3px 4px", color: "#EDEEF0" }}>
+                      {k.player}{" "}
+                      <span style={{ color: (POS_COLOR as Record<string, string>)[k.pos] ?? "#8B92A0", fontSize: 10 }}>
+                        {k.pos}
+                      </span>
+                      {k.likely && (
+                        <span style={{ color: "#E8A33D", fontSize: 10 }} title="Our default guess">
+                          {" "}
+                          ★
+                        </span>
+                      )}
+                    </td>
+                    <td style={{ textAlign: "right", fontFamily: "'IBM Plex Mono', monospace", color: "#C6CAD2" }}>
+                      ${k.cost}
+                    </td>
+                    <td style={{ textAlign: "right", fontFamily: "'IBM Plex Mono', monospace", color: "#C6CAD2" }}>
+                      {k.market != null ? `$${k.market}` : "—"}
+                    </td>
+                    <td
+                      style={{
+                        textAlign: "right",
+                        paddingLeft: 8,
+                        fontFamily: "'IBM Plex Mono', monospace",
+                        fontWeight: 600,
+                        color: evColor,
+                      }}
+                    >
+                      {k.ev == null ? "—" : `${k.ev >= 0 ? "+" : "−"}$${Math.abs(k.ev)}`}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+
+          <div style={{ fontSize: 11, color: "#C6CAD2", marginTop: 8, fontStyle: "italic" }}>{d.keeperOutlook}</div>
         </div>
       </div>
     </div>

@@ -3,24 +3,30 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { PLAYERS_DATA } from "@/lib/data/players";
-import { DRAFTERS_DATA } from "@/lib/data/drafters";
 import { OFFENSE_DATA } from "@/lib/data/offense";
 import { DEFAULT_STRATEGIES } from "@/lib/data/strategies";
 import {
   BoardRow as BoardRowType,
   Interest,
+  buildSlotLabels,
   computeBoard,
   computeMarketRead,
   computeStrategySlots,
   computeStrategyTargets,
+  expectedKeepers,
   fmtMoney,
+  KEEPER_CANDIDATE_BY_UID,
   POSITIONS,
-  Pos,
   recommendStrategy,
   suggestSlotAmount,
   tierColor,
   uid,
 } from "@/lib/draftLogic";
+import { rawCostAt } from "@/lib/data/rawDraftCosts";
+import { FINISH_2025 } from "@/lib/data/finish2025";
+import { points2025ForFinish } from "@/lib/data/points2025";
+import { SlotMenu, SlotMenuState } from "./SlotMenu";
+import { NoteEditor, NoteEditorState } from "./NoteEditor";
 import { BUILTIN_SOURCE_ID, BUILTIN_SOURCE_NAME, RankingConfig, RankingSource, applyRanking } from "@/lib/rankings";
 import { dropEdgeStyle, dropRank, useRowDrag } from "@/hooks/useRowDrag";
 import { useProfiles } from "@/hooks/useProfiles";
@@ -29,11 +35,13 @@ import { styles, fontImport, chipActive } from "./styles";
 import { ProfileBar } from "./ProfileBar";
 import { BoardRow } from "./BoardRow";
 import { TierDivider } from "./TierDivider";
-import { StrategyTab } from "./StrategyTab";
 import { RankingsTab } from "./RankingsTab";
 import { MarketReadPanel } from "./MarketReadPanel";
+import { StrategyAdvisor } from "./StrategyAdvisor";
 import { InsightsTab } from "./InsightsTab";
 import { OffensesTab } from "./OffensesTab";
+import { RawCostsTab } from "./RawCostsTab";
+import { TargetsTab } from "./TargetsTab";
 
 const PROFILE_STORAGE_KEY = "ffauction2026:profileId";
 
@@ -109,7 +117,7 @@ interface DraftToolProps {
 function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: DraftToolProps) {
   const { data, update, loaded, saveState } = useDraftState(profileId);
 
-  const [tab, setTab] = useState<"board" | "strategy" | "rankings" | "drafters" | "offenses">("board");
+  const [tab, setTab] = useState<"board" | "targets" | "rankings" | "drafters" | "offenses" | "rawcosts">("board");
   const [posFilter, setPosFilter] = useState("ALL");
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState("adp");
@@ -147,19 +155,60 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
     [d.interestByStrategy, d.activeStrategyId]
   );
 
-  const board = useMemo(
-    () => computeBoard(d.settings, d.keepers, d.drafted, allPlayers, d.playerMeta, d.tierOverrides, activeStrategy, activeInterest),
-    [d.settings, d.keepers, d.drafted, allPlayers, d.playerMeta, d.tierOverrides, activeStrategy, activeInterest]
+  // Slot assignments (player -> slot) and the position-ordinal slot labels for
+  // the active strategy, shared by the board's assign menu and the Targets page.
+  const assignments = useMemo(
+    () => d.assignmentsByStrategy[d.activeStrategyId] ?? {},
+    [d.assignmentsByStrategy, d.activeStrategyId]
   );
+  const slotLabels = useMemo(() => buildSlotLabels(activeStrategy), [activeStrategy]);
+
+  // Press-and-hold assign/dislike menu (board). Session-only.
+  const [slotMenu, setSlotMenu] = useState<SlotMenuState | null>(null);
+  // Open player-notes editor. Session-only; the notes themselves persist.
+  const [noteEditor, setNoteEditor] = useState<NoteEditorState | null>(null);
+
+  // Keepers are derived, not stored: the Insights checkboxes (keeperPicks over
+  // the built-in defaults) are the only keeper designation in the app.
+  const keepers = useMemo(() => expectedKeepers(d.keeperPicks), [d.keeperPicks]);
+
+  // Tiers from the active uploaded ranking (a single source with a tier column);
+  // absent for the built-in list or blends, where tiers stay strategy-derived.
+  const sourceTiers = useMemo(() => {
+    if (d.ranking.mode !== "source" || d.ranking.activeSourceId === BUILTIN_SOURCE_ID) return undefined;
+    const src = d.rankingSources.find((s) => s.id === d.ranking.activeSourceId);
+    return src?.tiers && Object.keys(src.tiers).length > 0 ? src.tiers : undefined;
+  }, [d.ranking.mode, d.ranking.activeSourceId, d.rankingSources]);
+
+  const board = useMemo(
+    () => computeBoard(d.settings, keepers, d.drafted, allPlayers, d.playerMeta, d.tierOverrides, activeStrategy, activeInterest, sourceTiers),
+    [d.settings, keepers, d.drafted, allPlayers, d.playerMeta, d.tierOverrides, activeStrategy, activeInterest, sourceTiers]
+  );
+
+  // Projected auction cost per player for the Insights keeper-value column.
+  // Ranks are ABSOLUTE (the board's RK column — keepers occupy their slots and
+  // never promote anyone), so this is simply "the RB19 costs what the league's
+  // RB19 slot has gone for," identical to the board's Act column.
+  const marketByUid = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const r of board.rows) {
+      if (r.effRank != null) m.set(r.id, rawCostAt(r.pos, r.effRank) ?? 1);
+    }
+    return m;
+  }, [board.rows]);
 
   const strategySlots = useMemo(() => computeStrategySlots(activeStrategy), [activeStrategy]);
   const strategyTargets = useMemo(() => computeStrategyTargets(board, strategySlots), [board, strategySlots]);
 
   const marketRead = useMemo(() => computeMarketRead(board), [board]);
   const recommendation = useMemo(
-    () => recommendStrategy(marketRead, d.strategies, d.activeStrategyId),
-    [marketRead, d.strategies, d.activeStrategyId]
+    () => recommendStrategy(board, marketRead, d.strategies, d.activeStrategyId, d.settings.budget),
+    [board, marketRead, d.strategies, d.activeStrategyId, d.settings.budget]
   );
+
+  // A rejected recommendation stays hidden until the engine suggests a different
+  // strategy — draft-session state only, so a fresh page starts clean.
+  const [dismissedRecId, setDismissedRecId] = useState<string | null>(null);
 
   const offenseRows = useMemo(() => {
     const rows = Object.entries(OFFENSE_DATA).map(([team, od]) => ({
@@ -177,8 +226,6 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
       return bv - av;
     });
   }, [offSort]);
-
-  const drafterRows = useMemo(() => Object.entries(DRAFTERS_DATA).map(([team, dd]) => ({ team, ...dd })), []);
 
   const endgameMaxBid = Math.max(board.myBudgetRemaining - Math.max(board.mySlotsRemaining - 1, 0), 0);
   const endgameSuggested = board.mySlotsRemaining > 0 && board.myBudgetRemaining <= board.mySlotsRemaining && !endgameMode;
@@ -243,49 +290,57 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
     [update]
   );
 
-  // The combined Status dropdown on the board: ownership and interest are mutually
-  // exclusive here, so setting one clears the other. Interest is per active strategy;
-  // ownership is global.
-  const setStatus = useCallback(
-    (row: BoardRowType, value: string) => {
-      const isInterest = value === "" || value === "love" || value === "like" || value === "dislike";
+  // Toggle whether you expect a league-mate to keep a player. Stored as a sparse
+  // override map: entries that match the built-in likely default are dropped so
+  // the saved state only records where you disagree with the defaults.
+  const setKeeperPick = useCallback(
+    (playerUid: string, next: boolean) => {
+      update((prev) => {
+        const picks = { ...prev.keeperPicks };
+        const cand = KEEPER_CANDIDATE_BY_UID[playerUid];
+        if (cand && next === cand.likelyDefault) delete picks[playerUid];
+        else picks[playerUid] = next;
+        return { ...prev, keeperPicks: picks };
+      });
+    },
+    [update]
+  );
+
+  // Set interest by player id (used by the assign/dislike menu, which only has an id).
+  const setInterestById = useCallback(
+    (id: string, value: Interest) => {
       update((prev) => {
         const map = { ...(prev.interestByStrategy[prev.activeStrategyId] ?? {}) };
-        if (isInterest) {
-          if (value === "" ) delete map[row.id];
-          else map[row.id] = value as Interest;
-          const nextKeepers = { ...prev.keepers };
-          delete nextKeepers[row.id];
-          const nextDrafted = { ...prev.drafted };
-          delete nextDrafted[row.id];
-          return {
-            ...prev,
-            keepers: nextKeepers,
-            drafted: nextDrafted,
-            interestByStrategy: { ...prev.interestByStrategy, [prev.activeStrategyId]: map },
-          };
-        }
-        // ownership: mine / keeper / keeper-mine — clear any interest for this strategy
-        delete map[row.id];
-        const wantsKeeper = value === "keeper" || value === "keeper-mine";
-        const wantsMine = value === "mine" || value === "keeper-mine";
-        const interestByStrategy = { ...prev.interestByStrategy, [prev.activeStrategyId]: map };
-        if (wantsKeeper) {
-          const nextKeepers = {
-            ...prev.keepers,
-            [row.id]: { name: row.name, pos: row.pos, cost: prev.keepers[row.id]?.cost ?? "", mine: wantsMine },
-          };
-          const nextDrafted = { ...prev.drafted };
-          delete nextDrafted[row.id];
-          return { ...prev, keepers: nextKeepers, drafted: nextDrafted, interestByStrategy };
-        }
-        const nextKeepers = { ...prev.keepers };
-        delete nextKeepers[row.id];
-        const nextDrafted = {
-          ...prev.drafted,
-          [row.id]: { price: prev.drafted[row.id] ? prev.drafted[row.id].price : "", mine: wantsMine },
-        };
-        return { ...prev, keepers: nextKeepers, drafted: nextDrafted, interestByStrategy };
+        if (value === "neutral") delete map[id];
+        else map[id] = value;
+        return { ...prev, interestByStrategy: { ...prev.interestByStrategy, [prev.activeStrategyId]: map } };
+      });
+    },
+    [update]
+  );
+
+  // Scouting notes are per player and global to the profile — never cleared by
+  // resets or ranking uploads. An emptied note drops out of storage entirely.
+  const setNote = useCallback(
+    (playerId: string, text: string) => {
+      update((prev) => {
+        const notes = { ...(prev.notes ?? {}) };
+        if (text.trim() === "") delete notes[playerId];
+        else notes[playerId] = text;
+        return { ...prev, notes };
+      });
+    },
+    [update]
+  );
+
+  // Pin (or unpin) a player to a draft slot for the active strategy.
+  const setAssignment = useCallback(
+    (playerId: string, slotId: string | null) => {
+      update((prev) => {
+        const map = { ...(prev.assignmentsByStrategy[prev.activeStrategyId] ?? {}) };
+        if (slotId === null) delete map[playerId];
+        else map[playerId] = slotId;
+        return { ...prev, assignmentsByStrategy: { ...prev.assignmentsByStrategy, [prev.activeStrategyId]: map } };
       });
     },
     [update]
@@ -299,19 +354,6 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
         playerMeta: {
           ...prev.playerMeta,
           [id]: { ...prev.playerMeta[id], [field]: parsed },
-        },
-      }));
-    },
-    [update]
-  );
-
-  const setKeeperCost = useCallback(
-    (row: BoardRowType, value: string) => {
-      update((prev) => ({
-        ...prev,
-        keepers: {
-          ...prev.keepers,
-          [row.id]: { name: row.name, pos: row.pos, mine: prev.keepers[row.id]?.mine ?? false, cost: value === "" ? "" : Number(value) },
         },
       }));
     },
@@ -396,6 +438,12 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
   // Board drag-and-drop: dropping a row pins that player at the drop spot (a
   // ranking override). Only meaningful while the board is in rank order.
   const boardDragEnabled = sortKey === "adp" && !endgameMode;
+
+  // Rank and Player are the two pinned columns; Player's sticky offset clears the
+  // Rank column, whose width depends on whether the drag handle is showing.
+  const rankStickyWidth = boardDragEnabled ? 62 : 38;
+  const playerStickyLeft = rankStickyWidth;
+
   const effRankById = useMemo(() => {
     const m = new Map<string, number>();
     allPlayers.forEach((p) => m.set(uid(p.name), p.adp));
@@ -482,8 +530,17 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
   }, [addForm, update]);
 
   const resetAll = useCallback(() => {
-    if (!window.confirm("Reset all keepers, draft picks, and settings for this profile? This can't be undone.")) return;
-    update(() => defaultDraftData());
+    if (!window.confirm("Reset all draft picks, keeper picks, and settings for this profile? Your player notes are kept. This can't be undone.")) return;
+    // Player notes are hand-written research, not draft state — they survive
+    // even a full profile reset.
+    update((prev) => ({ ...defaultDraftData(), notes: prev.notes ?? {} }));
+  }, [update]);
+
+  // Wipe every Paid entry (all drafted state) without touching keepers,
+  // ratings, max prices, or strategies — for re-running a mock draft.
+  const clearDraft = useCallback(() => {
+    if (!window.confirm("Clear all Paid prices and drafted marks? Keepers, ratings, and strategies are kept.")) return;
+    update((prev) => ({ ...prev, drafted: {} }));
   }, [update]);
 
   const setSlotPos = useCallback(
@@ -514,24 +571,6 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
     [update]
   );
 
-  // Per-position narrative on the Strategy cards. null removes the override so
-  // the card falls back to its generated summary.
-  const setPositionNote = useCallback(
-    (strategyId: string, pos: Pos, text: string | null) => {
-      update((prev) => ({
-        ...prev,
-        strategies: prev.strategies.map((s) => {
-          if (s.id !== strategyId) return s;
-          const positionNotes = { ...(s.positionNotes ?? {}) };
-          if (text === null) delete positionNotes[pos];
-          else positionNotes[pos] = text;
-          return { ...s, positionNotes };
-        }),
-      }));
-    },
-    [update]
-  );
-
   const setStrategyName = useCallback(
     (strategyId: string, name: string) => {
       update((prev) => ({ ...prev, strategies: prev.strategies.map((s) => (s.id === strategyId ? { ...s, name } : s)) }));
@@ -557,12 +596,37 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
         const strategies = next.length ? next : DEFAULT_STRATEGIES;
         const interestByStrategy = { ...prev.interestByStrategy };
         delete interestByStrategy[id];
+        const assignmentsByStrategy = { ...prev.assignmentsByStrategy };
+        delete assignmentsByStrategy[id];
         return {
           ...prev,
           strategies,
           interestByStrategy,
+          assignmentsByStrategy,
           activeStrategyId: prev.activeStrategyId === id ? "preset-balanced" : prev.activeStrategyId,
         };
+      });
+    },
+    [update]
+  );
+
+  // Reset one strategy's slot prices (a preset returns to its shipped slots; a
+  // custom one re-derives amounts from the market curve). Likes/dislikes and
+  // keepers are always kept. Also clears manual tier bars so the board's tiers
+  // re-derive from the reset prices, matching the behavior when you switch
+  // strategies.
+  const resetStrategy = useCallback(
+    (id: string) => {
+      if (!window.confirm("Reset this strategy's slot prices to the defaults? Likes/dislikes and keepers are kept.")) return;
+      update((prev) => {
+        const preset = DEFAULT_STRATEGIES.find((s) => s.id === id);
+        const strategies = prev.strategies.map((s) => {
+          if (s.id !== id) return s;
+          if (preset) return { ...s, slots: preset.slots.map((sl) => ({ ...sl })) };
+          return { ...s, slots: s.slots.map((sl, i) => ({ ...sl, amount: suggestSlotAmount(s.slots, i, sl.pos) })) };
+        });
+        const tierOverrides = prev.activeStrategyId === id ? {} : prev.tierOverrides;
+        return { ...prev, strategies, tierOverrides };
       });
     },
     [update]
@@ -631,8 +695,8 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
         <button style={tab === "board" ? styles.tabActive : styles.tab} onClick={() => setTab("board")}>
           Board
         </button>
-        <button style={tab === "strategy" ? styles.tabActive : styles.tab} onClick={() => setTab("strategy")}>
-          Strategy
+        <button style={tab === "targets" ? styles.tabActive : styles.tab} onClick={() => setTab("targets")}>
+          Targets
         </button>
         <button style={tab === "rankings" ? styles.tabActive : styles.tab} onClick={() => setTab("rankings")}>
           Rankings
@@ -643,14 +707,17 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
         <button style={tab === "offenses" ? styles.tabActive : styles.tab} onClick={() => setTab("offenses")}>
           Team Stats
         </button>
+        <button style={tab === "rawcosts" ? styles.tabActive : styles.tab} onClick={() => setTab("rawcosts")}>
+          Raw Draft Costs
+        </button>
       </div>
 
       {tab === "board" && (
         <>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, maxWidth: "100%" }}>
             <span style={{ fontSize: 11, color: "#8B92A0", flexShrink: 0 }}>Strategy</span>
             <select
-              style={{ ...styles.select, flex: 1 }}
+              style={{ ...styles.select, flex: 1, minWidth: 0 }}
               value={d.activeStrategyId}
               onChange={(e) => selectStrategy(e.target.value)}
             >
@@ -660,22 +727,39 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
                 </option>
               ))}
             </select>
+            {/* Truncate the (often long) ranking name so it can't push the row —
+                and the whole page — wider than the screen. */}
             <button
-              style={{ ...styles.smallBtn, flexShrink: 0 }}
-              title="Active ranking — change on the Rankings tab"
+              style={{
+                ...styles.smallBtn,
+                flex: "0 1 auto",
+                minWidth: 0,
+                maxWidth: 150,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+              title={`Active ranking: ${rankingLabel} — change on the Rankings tab`}
               onClick={() => setTab("rankings")}
             >
               Rks: {rankingLabel}
             </button>
           </div>
 
-          <MarketReadPanel
-            read={marketRead}
+          <StrategyAdvisor
             recommendation={recommendation}
             activeStrategyId={d.activeStrategyId}
             activeStrategyName={activeStrategy?.name ?? ""}
-            onSwitch={selectStrategy}
+            budget={d.settings.budget}
+            dismissedId={dismissedRecId}
+            onAccept={(id) => {
+              selectStrategy(id);
+              setDismissedRecId(null);
+            }}
+            onDismiss={setDismissedRecId}
           />
+
+          <MarketReadPanel read={marketRead} recommendation={recommendation} />
 
           {endgameSuggested && (
             <div style={styles.endgameBanner}>
@@ -711,6 +795,13 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
             />
             <button style={styles.smallBtn} onClick={() => setShowAddPlayer((s) => !s)}>
               + Player
+            </button>
+            <button
+              style={styles.smallBtn}
+              title="Erase every Paid price and drafted mark — keepers, ratings, and strategies are kept"
+              onClick={clearDraft}
+            >
+              Clear Draft
             </button>
           </div>
 
@@ -748,12 +839,12 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
                 {p === "LIKED" ? "♥ Liked" : p}
               </button>
             ))}
-            {isPosFilter && (
+            {isPosFilter && !sourceTiers && (
               <button style={styles.smallBtn} onClick={() => addTierBar(posFilter)}>
                 + Add tier
               </button>
             )}
-            {isPosFilter && Object.prototype.hasOwnProperty.call(d.tierOverrides, posFilter) && (
+            {isPosFilter && !sourceTiers && Object.prototype.hasOwnProperty.call(d.tierOverrides, posFilter) && (
               <button style={styles.smallBtn} onClick={() => resetTiers(posFilter)}>
                 Reset {posFilter} tiers
               </button>
@@ -762,7 +853,9 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
 
           {isPosFilter && (
             <div style={{ fontSize: 11, color: "#8B92A0", marginBottom: 10 }}>
-              Drag a tier bar to move players between tiers, or use the ✕ on a bar to remove it.
+              {sourceTiers
+                ? "Tiers come from your uploaded ranking. Press and hold a name to dislike or assign it to a slot."
+                : "Drag a tier bar to move players between tiers, or use the ✕ on a bar to remove it. Press and hold a name to dislike or assign it to a slot."}
             </div>
           )}
 
@@ -782,20 +875,21 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
                   >
                     Rk{sortKey === "adp" ? " ▾" : ""}
                   </th>
-                  <th style={{ ...styles.th, ...styles.thSticky2, ...(boardDragEnabled ? styles.stickyDragCol2 : {}) }}>
-                    Player
+                  <th style={{ ...styles.th, ...styles.thSticky2, left: playerStickyLeft }}>Player</th>
+                  <th style={styles.th} title="Last season's positional finish (e.g. RB5 = finished as the RB5)">
+                    2025
                   </th>
-                  <th
-                    style={{ ...styles.th, cursor: "pointer", color: sortKey === "pos" ? "#EDEEF0" : "#8B92A0" }}
-                    onClick={() => setSortKey("pos")}
-                  >
-                    Pos{sortKey === "pos" ? " ▾" : ""}
+                  <th style={styles.th} title="2025 season fantasy point total">
+                    Pts
                   </th>
                   <th
                     style={{ ...styles.th, cursor: "pointer", color: sortKey === "tier" ? "#EDEEF0" : "#8B92A0" }}
                     onClick={() => setSortKey("tier")}
                   >
                     Tier{sortKey === "tier" ? " ▾" : ""}
+                  </th>
+                  <th style={styles.th} title="What this positional rank actually cost in your league (weighted 3-yr price)">
+                    Act
                   </th>
                   <th
                     style={{ ...styles.th, cursor: "pointer", color: sortKey === "target" ? "#EDEEF0" : "#8B92A0" }}
@@ -811,7 +905,6 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
                   </th>
                   <th style={styles.th}>Max</th>
                   <th style={styles.th}>Paid</th>
-                  <th style={styles.th}>Status</th>
                 </tr>
               </thead>
               <tbody>
@@ -827,6 +920,26 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
                         <BoardRow
                           row={row}
                           tierBreak={tierBreak}
+                          playerStickyLeft={playerStickyLeft}
+                          showPos={false}
+                          actCost={rawCostAt(row.pos, row.effRank)}
+                          finish2025={FINISH_2025[row.id] ?? null}
+                          pts2025={points2025ForFinish(FINISH_2025[row.id])}
+                          assignedLabel={assignments[row.id] ? slotLabels.get(assignments[row.id])?.label ?? null : null}
+                          onOpenMenu={(r, rect) =>
+                            setSlotMenu({
+                              playerId: r.id,
+                              playerName: r.name,
+                              pos: r.pos,
+                              disliked: r.interest === "dislike",
+                              assignedSlotId: assignments[r.id] ?? null,
+                              rect,
+                            })
+                          }
+                          note={(d.notes ?? {})[row.id]}
+                          onOpenNote={(r, rect) =>
+                            setNoteEditor({ playerId: r.id, playerName: r.name, pos: r.pos, rect })
+                          }
                           isTarget={strategyTargets.targetIds.has(row.id)}
                           dragEnabled={boardDragEnabled}
                           dragging={boardDrag?.id === row.id}
@@ -834,13 +947,12 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
                           onDragStart={startBoardDrag(row.id)}
                           onPaid={setPaid}
                           onMeta={setMeta}
-                          onStatus={setStatus}
                           onRate={setInterest}
-                          onKeeperCost={setKeeperCost}
                         />
                         {breakIndex !== -1 && (
                           <TierDivider
                             pos={posFilter}
+                            colSpan={10}
                             index={breakIndex}
                             rank={breaks[breakIndex]}
                             lower={breakIndex > 0 ? breaks[breakIndex - 1] + 1 : 1}
@@ -862,25 +974,6 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
         </>
       )}
 
-      {tab === "strategy" && (
-        <StrategyTab
-          strategies={d.strategies}
-          activeStrategyId={d.activeStrategyId}
-          setActiveStrategyId={selectStrategy}
-          budget={d.settings.budget}
-          boardRows={board.rows}
-          onSlotPos={setSlotPos}
-          onSlotAmount={setSlotAmount}
-          onName={setStrategyName}
-          onAdd={addStrategy}
-          onDelete={deleteStrategy}
-          onRate={setInterest}
-          onPositionNote={setPositionNote}
-          onStatus={setStatus}
-          onKeeperCost={setKeeperCost}
-        />
-      )}
-
       {tab === "rankings" && (
         <RankingsTab
           players={basePlayers}
@@ -894,9 +987,61 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
         />
       )}
 
-      {tab === "drafters" && <InsightsTab rows={drafterRows} />}
+      {tab === "drafters" && (
+        <InsightsTab keeperPicks={d.keeperPicks} marketByUid={marketByUid} onToggleKeeper={setKeeperPick} />
+      )}
 
       {tab === "offenses" && <OffensesTab rows={offenseRows} sort={offSort} setSort={setOffSort} />}
+
+      {tab === "targets" && (
+        <TargetsTab
+          board={board}
+          marketRead={marketRead}
+          strategies={d.strategies}
+          activeStrategyId={d.activeStrategyId}
+          budget={d.settings.budget}
+          assignments={assignments}
+          slotLabels={slotLabels}
+          setActiveStrategyId={selectStrategy}
+          onSlotPos={setSlotPos}
+          onSlotAmount={setSlotAmount}
+          onName={setStrategyName}
+          onAdd={addStrategy}
+          onDelete={deleteStrategy}
+          onReset={resetStrategy}
+          onMeta={setMeta}
+          onRate={setInterest}
+          onAssign={setAssignment}
+          onDislike={setInterestById}
+        />
+      )}
+
+      {tab === "rawcosts" && <RawCostsTab />}
+
+      {slotMenu && (
+        <SlotMenu
+          menu={slotMenu}
+          slots={[...slotLabels.values()].filter((s) => s.pos === slotMenu.pos).sort((a, b) => b.amount - a.amount)}
+          onDislike={() => {
+            setInterestById(slotMenu.playerId, slotMenu.disliked ? "neutral" : "dislike");
+            setSlotMenu(null);
+          }}
+          onAssign={(slotId) => {
+            setAssignment(slotMenu.playerId, slotId);
+            setSlotMenu(null);
+          }}
+          onClose={() => setSlotMenu(null)}
+        />
+      )}
+
+      {noteEditor && (
+        <NoteEditor
+          note={noteEditor}
+          value={(d.notes ?? {})[noteEditor.playerId] ?? ""}
+          onChange={(text) => setNote(noteEditor.playerId, text)}
+          onClose={() => setNoteEditor(null)}
+        />
+      )}
 
       <div style={styles.footer}>{saveState === "saving" ? "Saving…" : saveState === "error" ? "Save failed" : "Synced"}</div>
     </div>

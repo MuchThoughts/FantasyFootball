@@ -349,14 +349,15 @@ export const styles: Record<string, CSSProperties> = {
     zIndex: 2,
     background: "#1C2128",
     minWidth: 120,
+    width: "99%",
     padding: "8px 4px",
     textAlign: "left",
     boxShadow: "2px 0 0 #2A2F38",
   },
-  // When the board's drag handle is visible, the first sticky column widens
-  // and the second shifts right to match — apply on top of th/tdSticky(2).
+  // When the board's drag handle is visible, the first sticky column widens;
+  // downstream pinned columns (Plan, Player) compute their own "left" offset
+  // dynamically in DraftTool to match. Apply on top of th/tdSticky.
   stickyDragCol1: { minWidth: 62, maxWidth: 62 },
-  stickyDragCol2: { left: 62 },
   td: {
     padding: "6px 6px",
     borderBottom: "1px solid #20242C",
@@ -380,7 +381,9 @@ export const styles: Record<string, CSSProperties> = {
     zIndex: 1,
     background: "#171A20",
     minWidth: 120,
-    maxWidth: 150,
+    // Take the table's leftover width so the board fills the screen instead of
+    // leaving blank space on the right; the numeric columns stay content-sized.
+    width: "99%",
     padding: "6px 4px",
     textAlign: "left",
     boxShadow: "2px 0 0 #20242C",
@@ -392,7 +395,7 @@ export const styles: Record<string, CSSProperties> = {
     whiteSpace: "nowrap",
     overflow: "hidden",
     textOverflow: "ellipsis",
-    maxWidth: 150,
+    maxWidth: 320,
     textAlign: "left",
   },
   tdPlayerMeta: { fontSize: 10, color: "#8B92A0", marginTop: 1, textAlign: "left" },

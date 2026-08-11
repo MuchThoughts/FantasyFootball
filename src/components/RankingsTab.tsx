@@ -68,7 +68,14 @@ export function RankingsTab({
     setUploadResult(parsed);
     if (parsed.matched === 0) return;
     const name = uploadName.trim() || `Rankings ${sources.length + 1}`;
-    onAddSource({ id: "src-" + Date.now(), name, createdAt: new Date().toISOString(), ranks: parsed.ranks });
+    const hasTiers = Object.keys(parsed.tiers).length > 0;
+    onAddSource({
+      id: "src-" + Date.now(),
+      name,
+      createdAt: new Date().toISOString(),
+      ranks: parsed.ranks,
+      ...(hasTiers ? { tiers: parsed.tiers } : {}),
+    });
     setUploadName("");
     setUploadText("");
   };
