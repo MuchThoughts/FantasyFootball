@@ -2,9 +2,13 @@
 
 import { useMemo, useState } from "react";
 import { Strategy } from "@/lib/data/strategies";
-import { BoardRow, FIXED_SLOT_POS, fmtMoney, Interest, POS_COLOR, POSITIONS, Pos, slotLabel } from "@/lib/draftLogic";
+import { BoardRow, FIXED_SLOT_POS, fmtMoney, Interest, POS_COLOR, POSITIONS, Pos } from "@/lib/draftLogic";
 import { usePlayerRating } from "@/hooks/usePlayerRating";
+import { CardSlot, PositionCard } from "./PositionCard";
 import { styles, chipActive } from "./styles";
+
+// Slide-in used when a position card changes page.
+const cardPageAnim = `@keyframes cardPageIn { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: none; } }`;
 
 interface StrategyTabProps {
   strategies: Strategy[];
@@ -18,6 +22,8 @@ interface StrategyTabProps {
   onAdd: () => void;
   onDelete: (id: string) => void;
   onRate: (row: BoardRow, value: Interest) => void;
+  // Per-position narrative on the front of each card; null resets to the auto-summary.
+  onPositionNote: (strategyId: string, pos: Pos, text: string | null) => void;
   // Keeper management reuses the app's global keeper machinery (same as the
   // Board's status dropdown), so keepers set here also show on the Board.
   onStatus: (row: BoardRow, value: string) => void;
@@ -70,6 +76,7 @@ export function StrategyTab({
   onAdd,
   onDelete,
   onRate,
+  onPositionNote,
   onStatus,
   onKeeperCost,
 }: StrategyTabProps) {
@@ -179,6 +186,7 @@ export function StrategyTab({
 
   return (
     <div>
+      <style>{cardPageAnim}</style>
       <div style={styles.chipRow}>
         {strategies.map((s) => (
           <button
@@ -220,8 +228,8 @@ export function StrategyTab({
 
         <div style={styles.panelTitle}>My keepers</div>
         <div style={{ fontSize: 11, color: "#8B92A0", marginBottom: 8 }}>
-          Add the players you&apos;re keeping and their cost. Each one fills the earliest slot at its position below —
-          hiding that slot&apos;s targets and counting its cost toward your budget.
+          Add the players you&apos;re keeping and their cost. Each one fills the slot at its position whose budget is
+          closest to that cost — hiding that slot&apos;s targets and counting its cost toward your budget.
         </div>
         {myKeepers.length > 0 && (
           <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 8 }}>
@@ -280,80 +288,34 @@ export function StrategyTab({
         {keeperError && <div style={{ fontSize: 11, color: "#E1524B", marginTop: 6 }}>{keeperError}</div>}
 
         <div style={{ fontSize: 11, color: "#8B92A0", margin: "14px 0 10px" }}>
-          Click a target to mark Like, double-click for Love, press and hold to Dislike (swaps in the next closest
-          player).
+          Swipe a card sideways (or use ‹ ›) to go from the position plan to each slot&apos;s targets. Click a
+          target to mark Like, double-click for Love, press and hold to Dislike (swaps in the next closest player).
         </div>
 
-        <div style={styles.tableWrap}>
-          <table style={styles.table}>
-            <thead>
-              <tr>
-                <th style={styles.th}>Slot</th>
-                <th style={styles.th}>Pos</th>
-                <th style={styles.th}>$</th>
-                <th style={styles.th}>Targets</th>
-              </tr>
-            </thead>
-            <tbody>
-              {active.slots.map((sl) => {
-                const fixed = !!FIXED_SLOT_POS[sl.id];
-                const options: Pos[] = sl.id.startsWith("flex") ? (["RB", "WR", "TE"] as Pos[]) : POSITIONS;
-                const keeper = slotKeeper.get(sl.id);
-                const comps = keeper ? [] : closestPlayers(sl.pos, sl.amount);
-                return (
-                  <tr key={sl.id} style={keeper ? { background: "rgba(76, 175, 107, 0.10)" } : undefined}>
-                    <td style={styles.td}>
-                      <span style={{ fontSize: 12 }}>{slotLabel(sl.id)}</span>
-                    </td>
-                    <td style={styles.td}>
-                      {fixed || keeper ? (
-                        <span style={{ ...styles.posTagSm, background: POS_COLOR[sl.pos] }}>{sl.pos}</span>
-                      ) : (
-                        <select
-                          style={{ ...styles.statusSelect, width: 60 }}
-                          value={sl.pos}
-                          onChange={(e) => onSlotPos(active.id, sl.id, e.target.value)}
-                        >
-                          {options.map((p) => (
-                            <option key={p} value={p} style={{ background: "#1C2128", color: "#EDEEF0" }}>
-                              {p}
-                            </option>
-                          ))}
-                        </select>
-                      )}
-                    </td>
-                    <td style={styles.td}>
-                      {keeper ? (
-                        <span style={{ ...styles.tdMono, color: "#8FCB9E" }} title="Keeper cost">
-                          ${Number(keeper.keeperCost) || 0}
-                        </span>
-                      ) : (
-                        <input
-                          style={styles.cellInput}
-                          type="number"
-                          value={sl.amount}
-                          onChange={(e) => onSlotAmount(active.id, sl.id, e.target.value)}
-                        />
-                      )}
-                    </td>
-                    <td style={{ ...styles.td, textAlign: "left", verticalAlign: "top" }}>
-                      {keeper ? (
-                        <span style={{ fontSize: 11, color: "#4CAF6B" }}>🔒 Keeper: {keeper.name}</span>
-                      ) : (
-                        <div style={{ display: "flex", flexDirection: "column" }}>
-                          {comps.map((c) => (
-                            <CompPlayerItem key={c.id} row={c} onRate={onRate} />
-                          ))}
-                          {comps.length === 0 && <span style={{ fontSize: 11, color: "#4A5160" }}>—</span>}
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        {POSITIONS.map((p) => {
+          const cardSlots: CardSlot[] = active.slots
+            .filter((sl) => sl.pos === p)
+            .map((sl) => ({ ...sl, keeper: slotKeeper.get(sl.id), effective: slotAmount(sl) }));
+          if (cardSlots.length === 0) return null;
+          return (
+            <PositionCard
+              key={p}
+              pos={p}
+              slots={cardSlots}
+              budget={budget}
+              note={active.positionNotes?.[p]}
+              onNote={(cardPos, text) => onPositionNote(active.id, cardPos, text)}
+              targetsFor={closestPlayers}
+              posOptionsFor={(slotId) =>
+                FIXED_SLOT_POS[slotId] ? null : slotId.startsWith("flex") ? (["RB", "WR", "TE"] as Pos[]) : POSITIONS
+              }
+              onSlotPos={(slotId, newPos) => onSlotPos(active.id, slotId, newPos)}
+              onSlotAmount={(slotId, value) => onSlotAmount(active.id, slotId, value)}
+              onRate={onRate}
+              renderTarget={(row) => <CompPlayerItem key={row.id} row={row} onRate={onRate} />}
+            />
+          );
+        })}
 
         <div style={{ marginTop: 14 }}>
           <div

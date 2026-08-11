@@ -15,6 +15,7 @@ import {
   computeStrategyTargets,
   fmtMoney,
   POSITIONS,
+  Pos,
   recommendStrategy,
   suggestSlotAmount,
   tierColor,
@@ -513,6 +514,24 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
     [update]
   );
 
+  // Per-position narrative on the Strategy cards. null removes the override so
+  // the card falls back to its generated summary.
+  const setPositionNote = useCallback(
+    (strategyId: string, pos: Pos, text: string | null) => {
+      update((prev) => ({
+        ...prev,
+        strategies: prev.strategies.map((s) => {
+          if (s.id !== strategyId) return s;
+          const positionNotes = { ...(s.positionNotes ?? {}) };
+          if (text === null) delete positionNotes[pos];
+          else positionNotes[pos] = text;
+          return { ...s, positionNotes };
+        }),
+      }));
+    },
+    [update]
+  );
+
   const setStrategyName = useCallback(
     (strategyId: string, name: string) => {
       update((prev) => ({ ...prev, strategies: prev.strategies.map((s) => (s.id === strategyId ? { ...s, name } : s)) }));
@@ -856,6 +875,7 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
           onAdd={addStrategy}
           onDelete={deleteStrategy}
           onRate={setInterest}
+          onPositionNote={setPositionNote}
           onStatus={setStatus}
           onKeeperCost={setKeeperCost}
         />

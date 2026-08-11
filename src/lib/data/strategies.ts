@@ -10,6 +10,11 @@ export interface Strategy {
   name: string;
   /** Why this build works and how to spend at each position — shown on the Strategy tab. */
   description?: string;
+  /**
+   * Per-position narrative shown on the front of each position card. Only set
+   * when the user has edited it; otherwise a summary is generated from the slots.
+   */
+  positionNotes?: Partial<Record<StrategySlot["pos"], string>>;
   slots: StrategySlot[];
 }
 
