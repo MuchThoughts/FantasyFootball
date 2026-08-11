@@ -18,8 +18,12 @@ import {
 } from "@/lib/draftLogic";
 import { rawCostAt } from "@/lib/data/rawDraftCosts";
 import { BoardRow } from "./BoardRow";
+import { CardPage, PositionCard } from "./PositionCard";
 import { SlotMenu, SlotMenuState } from "./SlotMenu";
 import { styles, chipActive } from "./styles";
+
+// Slide-in used when a position card changes page.
+const cardPageAnim = `@keyframes cardPageIn { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: none; } }`;
 
 // Reach/Target/Settle are fixed 5-player windows on the availability ladder, so
 // disliking or losing a player slides the next-closest one in.
@@ -46,6 +50,63 @@ interface Cluster {
   settle: BoardRowType[];
 }
 
+interface PlanSlot {
+  id: string;
+  label: string;
+  amount: number;
+  filled?: BoardRowType; // keeper or already-drafted player occupying this slot
+}
+
+// "RB5–RB9" — the tier a dollar amount actually buys, from the players priced
+// nearest it on the live board.
+function describeTier(pos: Pos, amount: number, avail: BoardRowType[]): string | null {
+  if (!avail.length || amount <= 0) return null;
+  const ranks = [...avail]
+    .sort((a, b) => Math.abs((a.target as number) - amount) - Math.abs((b.target as number) - amount))
+    .slice(0, 5)
+    .map((r) => r.effRank)
+    .filter((r): r is number => r != null);
+  if (!ranks.length) return null;
+  const lo = Math.min(...ranks);
+  const hi = Math.max(...ranks);
+  return lo === hi ? `${pos}${lo}` : `${pos}${lo}–${pos}${hi}`;
+}
+
+// Plain-language plan for a position, regenerated from the live slot prices
+// whenever the user hasn't written their own.
+function generateNote(pos: Pos, slots: PlanSlot[], budget: number, avail: BoardRowType[]): string {
+  if (slots.length === 0) return `No ${pos} slots in this strategy.`;
+  const total = slots.reduce((s, sl) => s + sl.amount, 0);
+  const pct = budget > 0 ? Math.round((100 * total) / budget) : 0;
+  const out = [
+    `Rostering ${slots.length} ${pos}${slots.length === 1 ? "" : "s"} for ${fmtMoney(total)} — ${pct}% of your ${fmtMoney(budget)} budget.`,
+  ];
+
+  const done = slots.filter((sl) => sl.filled);
+  const open = slots.filter((sl) => !sl.filled);
+  if (done.length) {
+    out.push(
+      `Already locked in: ${done.map((d) => `${d.filled!.name} at ${fmtMoney(d.amount)}`).join(", ")}.`
+    );
+  }
+  if (open.length) {
+    const top = open[0];
+    const tier = describeTier(pos, top.amount, avail);
+    out.push(`Your top open slot (${top.label}) budgets ${fmtMoney(top.amount)}${tier ? `, which buys around the ${tier} range` : ""}.`);
+    const rest = open.slice(1);
+    if (rest.length) {
+      const last = describeTier(pos, rest[rest.length - 1].amount, avail);
+      out.push(
+        `Then ${rest.length} more at ${rest.map((r) => fmtMoney(r.amount)).join(", ")}` +
+          `${last ? ` — depth down to about ${last}` : ""}.`
+      );
+    }
+  } else if (!done.length) {
+    out.push("No budget allocated here yet.");
+  }
+  return out.join(" ");
+}
+
 interface TargetsTabProps {
   board: Board;
   marketRead: MarketRead;
@@ -66,6 +127,8 @@ interface TargetsTabProps {
   onRate: (row: BoardRowType, value: Interest) => void;
   onAssign: (playerId: string, slotId: string | null) => void;
   onDislike: (playerId: string, value: Interest) => void;
+  // Editable per-position narrative on each card; null resets to the auto-summary.
+  onPositionNote: (strategyId: string, pos: Pos, text: string | null) => void;
 }
 
 export function TargetsTab({
@@ -87,6 +150,7 @@ export function TargetsTab({
   onRate,
   onAssign,
   onDislike,
+  onPositionNote,
 }: TargetsTabProps) {
   const strategy = strategies.find((s) => s.id === activeStrategyId) || strategies[0];
 
@@ -137,8 +201,9 @@ export function TargetsTab({
     return m;
   }, [board.rows]);
 
-  // Slots priced >= $2 group into shopping clusters (adjacent amounts within 60%
-  // shop the same shelf); $1 fliers are handled by the compact strip below.
+  // Slots priced >= $2 get their own shopping list. Only slots at the *same*
+  // price share one — different prices shop different shelves, so they stay
+  // apart. ($1 fliers are handled by the compact strip below.)
   const clusters = useMemo<Cluster[]>(() => {
     const out: Cluster[] = [];
     POSITIONS.forEach((pos) => {
@@ -146,7 +211,7 @@ export function TargetsTab({
       const groups: OpenSlot[][] = [];
       for (const slot of amounts) {
         const cur = groups[groups.length - 1];
-        if (cur && slot.amount >= 0.6 * cur[cur.length - 1].amount) cur.push(slot);
+        if (cur && slot.amount === cur[cur.length - 1].amount) cur.push(slot);
         else groups.push([slot]);
       }
       for (const slots of groups) {
@@ -242,6 +307,44 @@ export function TargetsTab({
     return list.sort((a, b) => a.drop - b.drop || b.savings - a.savings).slice(0, 4);
   }, [openSlots, availByPos]);
 
+  // Every slot at a position — filled ones included — for the card's plan page.
+  const planByPos = useMemo(() => {
+    const m: Partial<Record<Pos, PlanSlot[]>> = {};
+    POSITIONS.forEach((pos) => {
+      m[pos] = (strategy?.slots ?? [])
+        .filter((sl) => sl.pos === pos)
+        .map((sl) => {
+          const hit = filled.get(sl.id);
+          return {
+            id: sl.id,
+            label: slotLabels.get(sl.id)?.label ?? sl.id,
+            amount: hit ? Number(hit.keeperCost) || 0 : Number(sl.amount) || 0,
+            filled: hit,
+          };
+        })
+        .sort((a, b) => b.amount - a.amount);
+    });
+    return m;
+  }, [strategy, filled, slotLabels]);
+
+  // $1 fliers also only share a page when they're the same price.
+  const flierGroupsByPos = useMemo(() => {
+    const m: Partial<Record<Pos, OpenSlot[][]>> = {};
+    POSITIONS.forEach((pos) => {
+      const groups: OpenSlot[][] = [];
+      fliers
+        .filter((f) => f.pos === pos)
+        .sort((a, b) => b.amount - a.amount)
+        .forEach((s) => {
+          const cur = groups[groups.length - 1];
+          if (cur && s.amount === cur[cur.length - 1].amount) cur.push(s);
+          else groups.push([s]);
+        });
+      m[pos] = groups;
+    });
+    return m;
+  }, [fliers]);
+
   if (!strategy) return <div style={styles.emptyState}>No active strategy.</div>;
 
   const slotEditor = (sl: OpenSlot) => (
@@ -250,6 +353,7 @@ export function TargetsTab({
 
   return (
     <div>
+      <style>{cardPageAnim}</style>
       <StatusBar posPicks={posPicks} picks={strategy.slots.length} total={totalPlanned} budget={budget} />
 
       <div style={styles.chipRow}>
@@ -327,16 +431,20 @@ export function TargetsTab({
         section.
       </div>
 
-      {POSITIONS.filter((pos) => clusters.some((c) => c.pos === pos)).map((pos) => (
-        <div key={pos} style={{ marginBottom: 12 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "10px 0 4px" }}>
-            <span style={{ ...styles.posTagSm, background: POS_COLOR[pos] }}>{pos}</span>
-          </div>
-          {clusters
-            .filter((c) => c.pos === pos)
-            .map((c) => (
+      {POSITIONS.map((pos) => {
+        const plan = planByPos[pos] ?? [];
+        if (plan.length === 0) return null;
+        const posClusters = clusters.filter((c) => c.pos === pos);
+        const flierGroups = flierGroupsByPos[pos] ?? [];
+        const avail = availByPos[pos] ?? [];
+        const note = strategy.positionNotes?.[pos];
+        const posTotal = posTotals[pos];
+
+        const pages: CardPage[] = [
+          ...posClusters.map((c) => ({
+            key: c.key,
+            node: (
               <ClusterBlock
-                key={c.key}
                 cluster={c}
                 marketRead={marketRead}
                 slotEditor={slotEditor}
@@ -345,53 +453,110 @@ export function TargetsTab({
                 onMeta={onMeta}
                 onRate={onRate}
               />
-            ))}
-        </div>
-      ))}
+            ),
+          })),
+          ...flierGroups.map((group) => ({
+            key: group[0].id,
+            node: (
+              <FlierBlock
+                slots={group}
+                assignedByFlier={assignedByFlier}
+                slotEditor={slotEditor}
+                assignedLabelFor={assignedLabelFor}
+                onOpenMenu={openMenu}
+                onMeta={onMeta}
+                onRate={onRate}
+              />
+            ),
+          })),
+        ];
 
-      {fliers.length > 0 && (
-        <div style={{ ...styles.panel, padding: 10, marginBottom: 12 }}>
-          <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: 0.4, color: "#8B92A0", marginBottom: 6 }}>
-            $1 FLIERS <span style={{ color: "#5B6270", fontWeight: 400 }}>· curate darts by pinning players from the Board</span>
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {fliers.map((f) => (
-              <div key={f.id}>
-                <div style={{ marginBottom: assignedByFlier[f.id]?.length ? 4 : 0 }}>{slotEditor(f)}</div>
-                {assignedByFlier[f.id]?.length > 0 && (
-                  <div style={styles.tableWrap}>
-                    <table style={styles.table}>
-                      <tbody>
-                        {assignedByFlier[f.id].map((row) => (
-                          <BoardRow
-                            key={row.id}
-                            row={row}
-                            tierBreak={false}
-                            isTarget={false}
-                            dragEnabled={false}
-                            dragging={false}
-                            dropEdge={{}}
-                            onDragStart={() => {}}
-                            playerStickyLeft={38}
-                            showPos={false}
-                            showPaid={false}
-                            actCost={rawCostAt(row.pos, row.effRank)}
-                            assignedLabel={assignedLabelFor(row.id)}
-                            onOpenMenu={openMenu}
-                            onPaid={() => {}}
-                            onMeta={onMeta}
-                            onRate={onRate}
-                          />
-                        ))}
-                      </tbody>
-                    </table>
+        return (
+          <PositionCard
+            key={pos}
+            pos={pos}
+            total={posTotal}
+            pct={budget ? Math.round((100 * posTotal) / budget) : 0}
+            picks={plan.length}
+            pages={pages}
+            overview={
+              <div>
+                <textarea
+                  style={{
+                    ...styles.input,
+                    width: "100%",
+                    minHeight: 92,
+                    resize: "vertical",
+                    fontFamily: "inherit",
+                    fontSize: 12.5,
+                    lineHeight: 1.55,
+                    color: note === undefined ? "#A7ADBA" : "#EDEEF0",
+                  }}
+                  value={note ?? generateNote(pos, plan, budget, avail)}
+                  onChange={(e) => onPositionNote(strategy.id, pos, e.target.value)}
+                />
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4, marginBottom: 10 }}>
+                  <span style={{ fontSize: 10, color: "#4A5160", flex: 1 }}>
+                    {note === undefined ? "Auto-summary — edit to make it yours." : "Your notes."}
+                  </span>
+                  {note !== undefined && (
+                    <button style={styles.smallBtn} onClick={() => onPositionNote(strategy.id, pos, null)}>
+                      Reset
+                    </button>
+                  )}
+                </div>
+
+                <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: 0.4, color: "#8B92A0", marginBottom: 5 }}>
+                  SLOTS &amp; BUDGETS
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  {plan.map((sl) => (
+                    <div
+                      key={sl.id}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        padding: "5px 8px",
+                        background: "#14171C",
+                        border: "1px solid #2A2F38",
+                        borderRadius: 6,
+                      }}
+                    >
+                      <span style={{ fontSize: 12, flex: 1 }}>
+                        {sl.label}
+                        {sl.filled && (
+                          <span style={{ color: "#4CAF6B", fontSize: 11 }}>
+                            {" "}
+                            {sl.filled.isKeeper ? "🔒" : "✓"} {sl.filled.name}
+                          </span>
+                        )}
+                      </span>
+                      <span style={{ ...styles.tdMono, fontSize: 12, color: sl.filled ? "#8FCB9E" : "#EDEEF0" }}>
+                        {fmtMoney(sl.amount)}
+                      </span>
+                    </div>
+                  ))}
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      padding: "6px 8px",
+                      fontSize: 12,
+                      fontWeight: 600,
+                      borderTop: "1px solid #2A2F38",
+                      marginTop: 2,
+                    }}
+                  >
+                    <span>Total {pos}</span>
+                    <span style={styles.tdMono}>{fmtMoney(posTotal)}</span>
                   </div>
-                )}
+                </div>
               </div>
-            ))}
-          </div>
-        </div>
-      )}
+            }
+          />
+        );
+      })}
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginTop: 10 }}>
         <button
@@ -636,6 +801,71 @@ function ClusterBlock({
             })}
           </tbody>
         </table>
+      </div>
+    </div>
+  );
+}
+
+// $1 endgame slots: editable, plus whatever darts you've pinned to them.
+function FlierBlock({
+  slots,
+  assignedByFlier,
+  slotEditor,
+  assignedLabelFor,
+  onOpenMenu,
+  onMeta,
+  onRate,
+}: {
+  slots: OpenSlot[];
+  assignedByFlier: Record<string, BoardRowType[]>;
+  slotEditor: (sl: OpenSlot) => React.ReactNode;
+  assignedLabelFor: (id: string) => string | null;
+  onOpenMenu: (row: BoardRowType, rect: SlotMenuState["rect"]) => void;
+  onMeta: (id: string, field: "max", value: string) => void;
+  onRate: (row: BoardRowType, value: Interest) => void;
+}) {
+  const noop = () => {};
+  return (
+    <div>
+      <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: 0.4, color: "#8B92A0", marginBottom: 6 }}>
+        {slots.map((s) => s.label).join(" + ")}{" "}
+        <span style={{ color: "#5B6270", fontWeight: 400 }}>· curate darts by pinning players from the Board</span>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {slots.map((f) => (
+          <div key={f.id}>
+            <div style={{ marginBottom: assignedByFlier[f.id]?.length ? 4 : 0 }}>{slotEditor(f)}</div>
+            {assignedByFlier[f.id]?.length > 0 && (
+              <div style={styles.tableWrap}>
+                <table style={styles.table}>
+                  <tbody>
+                    {assignedByFlier[f.id].map((row) => (
+                      <BoardRow
+                        key={row.id}
+                        row={row}
+                        tierBreak={false}
+                        isTarget={false}
+                        dragEnabled={false}
+                        dragging={false}
+                        dropEdge={{}}
+                        onDragStart={noop}
+                        playerStickyLeft={38}
+                        showPos={false}
+                        showPaid={false}
+                        actCost={rawCostAt(row.pos, row.effRank)}
+                        assignedLabel={assignedLabelFor(row.id)}
+                        onOpenMenu={onOpenMenu}
+                        onPaid={noop}
+                        onMeta={onMeta}
+                        onRate={onRate}
+                      />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        ))}
       </div>
     </div>
   );
