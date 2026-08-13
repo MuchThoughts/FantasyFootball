@@ -416,6 +416,7 @@ export function TargetsTab({
         const pages: CardPage[] = [
           ...posClusters.map((c) => ({
             key: c.key,
+            slotIds: c.slots.map((sl) => sl.id),
             node: (
               <ClusterBlock
                 cluster={c}
@@ -430,6 +431,7 @@ export function TargetsTab({
           })),
           ...flierGroups.map((group) => ({
             key: group[0].id,
+            slotIds: group.map((sl) => sl.id),
             node: (
               <FlierBlock
                 slots={group}
@@ -444,6 +446,8 @@ export function TargetsTab({
           })),
         ];
 
+        const pageSlotIds = new Set(pages.flatMap((pg) => pg.slotIds));
+
         return (
           <PositionCard
             key={pos}
@@ -452,7 +456,7 @@ export function TargetsTab({
             pct={budget ? Math.round((100 * posTotal) / budget) : 0}
             picks={plan.length}
             pages={pages}
-            overview={
+            overview={(goToSlot) => (
               <div>
                 <textarea
                   style={{
@@ -483,33 +487,42 @@ export function TargetsTab({
                   SLOTS &amp; BUDGETS
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                  {plan.map((sl) => (
-                    <div
-                      key={sl.id}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 8,
-                        padding: "5px 8px",
-                        background: "#14171C",
-                        border: "1px solid #2A2F38",
-                        borderRadius: 6,
-                      }}
-                    >
-                      <span style={{ fontSize: 12, flex: 1 }}>
-                        {sl.label}
-                        {sl.filled && (
-                          <span style={{ color: "#4CAF6B", fontSize: 11 }}>
-                            {" "}
-                            {sl.filled.isKeeper ? "🔒" : "✓"} {sl.filled.name}
-                          </span>
-                        )}
-                      </span>
-                      <span style={{ ...styles.tdMono, fontSize: 12, color: sl.filled ? "#8FCB9E" : "#EDEEF0" }}>
-                        {fmtMoney(sl.amount)}
-                      </span>
-                    </div>
-                  ))}
+                  {plan.map((sl) => {
+                    // Slots with a shopping list jump straight to it; filled ones
+                    // have no page to go to, so they stay plain rows.
+                    const linked = pageSlotIds.has(sl.id);
+                    return (
+                      <div
+                        key={sl.id}
+                        onClick={linked ? () => goToSlot(sl.id) : undefined}
+                        title={linked ? `Go to ${sl.label} targets` : undefined}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                          padding: "5px 8px",
+                          background: "#14171C",
+                          border: "1px solid #2A2F38",
+                          borderRadius: 6,
+                          cursor: linked ? "pointer" : "default",
+                        }}
+                      >
+                        <span style={{ fontSize: 12, flex: 1, color: linked ? "#EDEEF0" : undefined }}>
+                          {sl.label}
+                          {sl.filled && (
+                            <span style={{ color: "#4CAF6B", fontSize: 11 }}>
+                              {" "}
+                              {sl.filled.isKeeper ? "🔒" : "✓"} {sl.filled.name}
+                            </span>
+                          )}
+                        </span>
+                        <span style={{ ...styles.tdMono, fontSize: 12, color: sl.filled ? "#8FCB9E" : "#EDEEF0" }}>
+                          {fmtMoney(sl.amount)}
+                        </span>
+                        {linked && <span style={{ fontSize: 11, color: "#5B6270" }}>›</span>}
+                      </div>
+                    );
+                  })}
                   <div
                     style={{
                       display: "flex",
@@ -526,7 +539,7 @@ export function TargetsTab({
                   </div>
                 </div>
               </div>
-            }
+            )}
           />
         );
       })}

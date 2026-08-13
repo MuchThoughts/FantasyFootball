@@ -6,6 +6,7 @@ import { styles } from "./styles";
 
 export interface CardPage {
   key: string;
+  slotIds: string[]; // the slots this page covers, so the plan page can link to it
   node: React.ReactNode;
 }
 
@@ -14,7 +15,9 @@ interface PositionCardProps {
   total: number; // planned/committed dollars at this position
   pct: number; // share of the whole budget
   picks: number; // how many players at this position
-  overview: React.ReactNode; // page 1
+  // Page 1. Receives a jump function so its slot list can link straight to the
+  // page covering a given slot.
+  overview: (goToSlot: (slotId: string) => void) => React.ReactNode;
   pages: CardPage[]; // one per slot group, in order
 }
 
@@ -39,6 +42,11 @@ export function PositionCard({ pos, total, pct, picks, overview, pages }: Positi
   const pageCount = pages.length + 1;
   const current = Math.min(page, pageCount - 1);
   const go = (delta: number) => setPage(Math.max(0, Math.min(pageCount - 1, current + delta)));
+
+  const goToSlot = (slotId: string) => {
+    const i = pages.findIndex((pg) => pg.slotIds.includes(slotId));
+    if (i >= 0) setPage(i + 1); // page 0 is the plan
+  };
 
   const SWIPE_MIN = 45;
   const onPointerDown = (e: React.PointerEvent) => {
@@ -105,7 +113,7 @@ export function PositionCard({ pos, total, pct, picks, overview, pages }: Positi
       </div>
 
       <div key={current} style={{ animation: "cardPageIn 0.18s ease" }}>
-        {current === 0 ? overview : pages[current - 1].node}
+        {current === 0 ? overview(goToSlot) : pages[current - 1].node}
       </div>
 
       {pageCount > 1 && (
