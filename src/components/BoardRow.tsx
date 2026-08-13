@@ -7,6 +7,22 @@ import { usePlayerRating } from "@/hooks/usePlayerRating";
 import { DragHandle } from "./DragHandle";
 import { styles } from "./styles";
 
+/*
+ * The player column is kept narrow so the board stays usable on a phone, so a
+ * long name scales down to fit rather than being clipped. Width is estimated
+ * from character count rather than measured: it's deterministic, so the
+ * prerendered HTML and the client agree, and it costs nothing per row.
+ */
+const NAME_BASE_SIZE = 12.5;
+const NAME_MIN_SIZE = 9;
+const NAME_FIT_CHARS = 15; // roughly what fits at the base size in this column
+
+function nameFontSize(name: string, team: string): number {
+  const chars = name.length + (team ? team.length + 1 : 0);
+  if (chars <= NAME_FIT_CHARS) return NAME_BASE_SIZE;
+  return Math.max(NAME_MIN_SIZE, Math.round((NAME_BASE_SIZE * NAME_FIT_CHARS * 10) / chars) / 10);
+}
+
 interface BoardRowProps {
   row: BoardRowType;
   tierBreak: boolean;
@@ -83,6 +99,8 @@ export function BoardRow({
     : undefined;
   const { pressing, handlers } = usePlayerRating(row.interest, (v) => onRate(row, v), onHold);
   const nameClickable = !row.isKeeper && !row.isDrafted && !row.mine;
+  // Team rides along in the same line, so it counts toward the fit and scales with it.
+  const nameStyle = { ...styles.tdPlayerName, fontSize: nameFontSize(row.name, row.team) };
   const dimmed = row.isDrafted || row.isKeeper || row.interest === "dislike";
   // Drop-target edge wins over a tier break line while a drag is in flight.
   const tBreakStyle = { ...(tierBreak ? { borderTop: `2px solid ${tierColor(row.tier)}` } : {}), ...dropEdge };
@@ -181,9 +199,9 @@ export function BoardRow({
                   touchAction: "manipulation",
                 }}
               >
-                <div style={styles.tdPlayerName}>
+                <div style={nameStyle}>
                   {row.name}
-                  {row.team && <span style={{ color: "#7A828F", fontWeight: 400, fontSize: 11 }}> {row.team}</span>}
+                  {row.team && <span style={{ color: "#7A828F", fontWeight: 400, fontSize: "0.88em" }}> {row.team}</span>}
                 </div>
                 <div style={styles.tdPlayerMeta}>
                   ADP {row.adp}
@@ -194,9 +212,9 @@ export function BoardRow({
               </div>
             ) : (
               <>
-                <div style={styles.tdPlayerName}>
+                <div style={nameStyle}>
                   {row.name}
-                  {row.team && <span style={{ color: "#7A828F", fontWeight: 400, fontSize: 11 }}> {row.team}</span>}
+                  {row.team && <span style={{ color: "#7A828F", fontWeight: 400, fontSize: "0.88em" }}> {row.team}</span>}
                 </div>
                 <div style={styles.tdPlayerMeta}>
                   ADP {row.adp}
