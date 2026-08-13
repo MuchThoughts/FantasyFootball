@@ -289,39 +289,6 @@ export function TargetsTab({
     : 0;
   const benchTotal = totalPlanned - starterTotal;
 
-  // ── Global budget flex ──────────────────────────────────────────────────────
-  const openPlanned = openSlots.reduce((s, sl) => s + sl.amount, 0);
-  const slack = board.myBudgetRemaining - openPlanned;
-
-  const upgrades = useMemo(() => {
-    const list: { slot: OpenSlot; row: BoardRowType; extra: number }[] = [];
-    for (const slot of openSlots) {
-      if (slot.amount < 2) continue;
-      const avail = availByPos[slot.pos] ?? [];
-      const above = avail.filter((r) => (r.live ?? Infinity) > slot.amount);
-      if (above.length === 0) continue;
-      const row = above[above.length - 1];
-      const extra = (row.live as number) - slot.amount;
-      if (extra <= 25) list.push({ slot, row, extra });
-    }
-    return list.sort((a, b) => a.extra - b.extra).slice(0, 4);
-  }, [openSlots, availByPos]);
-
-  const cuts = useMemo(() => {
-    const list: { slot: OpenSlot; row: BoardRowType; savings: number; drop: number }[] = [];
-    for (const slot of openSlots) {
-      if (slot.amount < 4) continue;
-      const avail = availByPos[slot.pos] ?? [];
-      const bestNow = avail.find((r) => (r.live ?? Infinity) <= slot.amount);
-      const down = avail.find((r) => (r.live ?? Infinity) <= slot.amount - 3);
-      if (!down) continue;
-      const savings = slot.amount - (down.live as number);
-      const drop = bestNow ? (bestNow.target as number) - (down.target as number) : 0;
-      list.push({ slot, row: down, savings, drop });
-    }
-    return list.sort((a, b) => a.drop - b.drop || b.savings - a.savings).slice(0, 4);
-  }, [openSlots, availByPos]);
-
   // Every slot at a position — filled ones included — for the card's plan page.
   const planByPos = useMemo(() => {
     const m: Partial<Record<Pos, PlanSlot[]>> = {};
@@ -436,8 +403,6 @@ export function TargetsTab({
           Starters {fmtMoney(starterTotal)} · Bench {fmtMoney(benchTotal)}
         </span>
       </div>
-
-      <BudgetFlex slack={slack} budgetLeft={board.myBudgetRemaining} openPlanned={openPlanned} upgrades={upgrades} cuts={cuts} />
 
       <div style={{ fontSize: 11, color: "#8B92A0", margin: "4px 0 10px" }}>
         Edit a slot&apos;s position or dollar target below and its shopping list refreshes. <b>Reach</b> = the five
@@ -944,64 +909,6 @@ function FlierBlock({
             )}
           </div>
         ))}
-      </div>
-    </div>
-  );
-}
-
-function BudgetFlex({
-  slack,
-  budgetLeft,
-  openPlanned,
-  upgrades,
-  cuts,
-}: {
-  slack: number;
-  budgetLeft: number;
-  openPlanned: number;
-  upgrades: { slot: OpenSlot; row: BoardRowType; extra: number }[];
-  cuts: { slot: OpenSlot; row: BoardRowType; savings: number; drop: number }[];
-}) {
-  const state = slack > 0 ? "under" : slack < 0 ? "over" : "even";
-  const headColor = state === "under" ? "#4CAF6B" : state === "over" ? "#E1524B" : "#8B92A0";
-  return (
-    <div style={{ ...styles.panel, padding: 12, marginBottom: 12 }}>
-      <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 0.4, color: "#8B92A0", marginBottom: 4 }}>
-        BUDGET FLEX
-      </div>
-      <div style={{ fontSize: 13, fontWeight: 600, color: headColor, marginBottom: 8 }}>
-        {fmtMoney(budgetLeft)} left · open slots plan {fmtMoney(openPlanned)} —{" "}
-        {state === "even"
-          ? "right on plan"
-          : state === "under"
-          ? `${fmtMoney(slack)} banked to deploy`
-          : `${fmtMoney(-slack)} must come out of the plan`}
-      </div>
-      <div style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>
-        <div style={{ flex: "1 1 240px" }}>
-          <div style={{ fontSize: 10, color: "#4CAF6B", fontWeight: 600, marginBottom: 3 }}>
-            IF YOU&apos;RE AHEAD, SPEND IT ON
-          </div>
-          {upgrades.length === 0 && <div style={{ fontSize: 11, color: "#5B6270" }}>No affordable step up right now.</div>}
-          {upgrades.map((u) => (
-            <div key={u.slot.id} style={{ fontSize: 11.5, color: "#C6CAD2", marginBottom: 2 }}>
-              <span style={{ color: "#EDEEF0", fontWeight: 600 }}>{u.slot.label}</span> +{fmtMoney(u.extra)} →{" "}
-              {u.row.name} <span style={{ color: "#8B92A0" }}>(live ${u.row.live})</span>
-            </div>
-          ))}
-        </div>
-        <div style={{ flex: "1 1 240px" }}>
-          <div style={{ fontSize: 10, color: "#E8A33D", fontWeight: 600, marginBottom: 3 }}>
-            IF YOU&apos;RE OVER, TAKE IT FROM
-          </div>
-          {cuts.length === 0 && <div style={{ fontSize: 11, color: "#5B6270" }}>No painless cuts available.</div>}
-          {cuts.map((c) => (
-            <div key={c.slot.id} style={{ fontSize: 11.5, color: "#C6CAD2", marginBottom: 2 }}>
-              <span style={{ color: "#EDEEF0", fontWeight: 600 }}>{c.slot.label}</span> −{fmtMoney(c.savings)} → still{" "}
-              {c.row.name} <span style={{ color: "#8B92A0" }}>(live ${c.row.live})</span>
-            </div>
-          ))}
-        </div>
       </div>
     </div>
   );
