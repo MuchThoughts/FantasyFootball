@@ -6,6 +6,8 @@ import { PLAYERS_DATA } from "@/lib/data/players";
 import { OFFENSE_DATA } from "@/lib/data/offense";
 import { DEFAULT_STRATEGIES } from "@/lib/data/strategies";
 import {
+  assignKeepersToSlots,
+  BAND_COLOR,
   BoardRow as BoardRowType,
   Interest,
   buildSlotLabels,
@@ -16,11 +18,11 @@ import {
   expectedKeepers,
   fmtMoney,
   KEEPER_CANDIDATE_BY_UID,
+  playerBands,
   POSITIONS,
   Pos,
   recommendStrategy,
   suggestSlotAmount,
-  tierColor,
   uid,
 } from "@/lib/draftLogic";
 import { rawCostAt } from "@/lib/data/rawDraftCosts";
@@ -35,7 +37,6 @@ import { defaultDraftData, useDraftState } from "@/hooks/useDraftState";
 import { styles, fontImport, chipActive } from "./styles";
 import { ProfileBar } from "./ProfileBar";
 import { BoardRow } from "./BoardRow";
-import { TierDivider } from "./TierDivider";
 import { RankingsTab } from "./RankingsTab";
 import { MarketReadPanel } from "./MarketReadPanel";
 import { StrategyAdvisor } from "./StrategyAdvisor";
@@ -198,6 +199,16 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
     return m;
   }, [board.rows]);
 
+  // Which strategy shopping window each player falls in — the same Reach/Target/
+  // Settle windows the Targets tab shows, tinting the board's rank column.
+  const bandByPlayer = useMemo(() => {
+    const myFilled = assignKeepersToSlots(activeStrategy, [
+      ...board.rows.filter((r) => r.isKeeper && r.mine),
+      ...board.myDrafted,
+    ]);
+    return playerBands(activeStrategy, board.rows, new Set(myFilled.keys()));
+  }, [activeStrategy, board.rows, board.myDrafted]);
+
   const strategySlots = useMemo(() => computeStrategySlots(activeStrategy), [activeStrategy]);
   const strategyTargets = useMemo(() => computeStrategyTargets(board, strategySlots), [board, strategySlots]);
 
@@ -257,10 +268,6 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
       return a.adp - b.adp;
     });
   }, [board.rows, posFilter, search, sortKey, endgameMode, endgameMaxBid]);
-
-  // true only when a single real position is selected (not ALL or the Liked filter) —
-  // tier bars are per-position, so their controls only apply in that case.
-  const isPosFilter = (POSITIONS as string[]).includes(posFilter);
 
   const setPaid = useCallback(
     (row: BoardRowType, value: string) => {
@@ -359,71 +366,8 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
     [update]
   );
 
-  const setTierBoundary = useCallback(
-    (pos: string, index: number, currentBreaks: number[], newRank: number) => {
-      update((prev) => {
-        const hasOverride = Object.prototype.hasOwnProperty.call(prev.tierOverrides, pos);
-        const base = hasOverride ? prev.tierOverrides[pos] : currentBreaks;
-        const next = [...base];
-        next[index] = newRank;
-        next.sort((a, b) => a - b);
-        return { ...prev, tierOverrides: { ...prev.tierOverrides, [pos]: next } };
-      });
-    },
-    [update]
-  );
-
-  const resetTiers = useCallback(
-    (pos: string) => {
-      update((prev) => {
-        const next = { ...prev.tierOverrides };
-        delete next[pos];
-        return { ...prev, tierOverrides: next };
-      });
-    },
-    [update]
-  );
-
   // Splits whichever gap between existing bars (or the position's ends) is currently
   // largest, so "add a bar" always lands somewhere useful without the user picking a rank.
-  const addTierBar = useCallback(
-    (pos: string) => {
-      update((prev) => {
-        const n = board.positionCounts[pos] || 0;
-        if (n < 2) return prev;
-        const hasOverride = Object.prototype.hasOwnProperty.call(prev.tierOverrides, pos);
-        const current = hasOverride ? prev.tierOverrides[pos] : board.tierBreaks[pos] || [];
-        const bounds = [0, ...current, n];
-        let bestGapIdx = 0;
-        let bestGapSize = -1;
-        for (let i = 0; i < bounds.length - 1; i++) {
-          const size = bounds[i + 1] - bounds[i];
-          if (size > bestGapSize) {
-            bestGapSize = size;
-            bestGapIdx = i;
-          }
-        }
-        if (bestGapSize < 2) return prev; // no room left to split further
-        const newRank = Math.floor((bounds[bestGapIdx] + bounds[bestGapIdx + 1]) / 2);
-        const next = Array.from(new Set([...current, newRank])).sort((a, b) => a - b);
-        return { ...prev, tierOverrides: { ...prev.tierOverrides, [pos]: next } };
-      });
-    },
-    [update, board.positionCounts, board.tierBreaks]
-  );
-
-  const removeTierBar = useCallback(
-    (pos: string, rank: number) => {
-      update((prev) => {
-        const hasOverride = Object.prototype.hasOwnProperty.call(prev.tierOverrides, pos);
-        const current = hasOverride ? prev.tierOverrides[pos] : board.tierBreaks[pos] || [];
-        const next = current.filter((r) => r !== rank);
-        return { ...prev, tierOverrides: { ...prev.tierOverrides, [pos]: next } };
-      });
-    },
-    [update, board.tierBreaks]
-  );
-
   // Switching strategy resets manually-dragged/added/removed tier bars back to
   // whatever the new strategy implies — tiers "follow" the active strategy. Re-selecting
   // the already-active strategy is a no-op so it doesn't wipe manual edits pointlessly.
@@ -858,25 +802,13 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
                 {p === "LIKED" ? "♥ Liked" : p}
               </button>
             ))}
-            {isPosFilter && !sourceTiers && (
-              <button style={styles.smallBtn} onClick={() => addTierBar(posFilter)}>
-                + Add tier
-              </button>
-            )}
-            {isPosFilter && !sourceTiers && Object.prototype.hasOwnProperty.call(d.tierOverrides, posFilter) && (
-              <button style={styles.smallBtn} onClick={() => resetTiers(posFilter)}>
-                Reset {posFilter} tiers
-              </button>
-            )}
           </div>
 
-          {isPosFilter && (
-            <div style={{ fontSize: 11, color: "#8B92A0", marginBottom: 10 }}>
-              {sourceTiers
-                ? "Tiers come from your uploaded ranking. Press and hold a name to dislike or assign it to a slot."
-                : "Drag a tier bar to move players between tiers, or use the ✕ on a bar to remove it. Press and hold a name to dislike or assign it to a slot."}
-            </div>
-          )}
+          <div style={{ fontSize: 11, color: "#8B92A0", marginBottom: 10 }}>
+            Rank is tinted by where the player sits against your strategy&apos;s slot prices:{" "}
+            <b style={{ color: BAND_COLOR.reach }}>Reach</b>, <b style={{ color: BAND_COLOR.target }}>Target</b>,{" "}
+            <b style={{ color: BAND_COLOR.settle }}>Settle</b>. Press and hold a name to dislike or assign it to a slot.
+          </div>
 
           <div style={styles.tableWrap}>
             <table style={styles.table}>
@@ -917,17 +849,13 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
               </thead>
               <tbody>
                 {(() => {
-                  const breaks = isPosFilter ? board.tierBreaks[posFilter] || [] : [];
-                  const posCount = isPosFilter ? board.positionCounts[posFilter] || 0 : 0;
-                  return filteredRows.map((row, idx) => {
-                    const prevRow = filteredRows[idx - 1];
-                    const tierBreak = !!prevRow && prevRow.pos === row.pos && prevRow.tier !== row.tier && row.tier != null;
-                    const breakIndex = isPosFilter && !row.isKeeper ? breaks.indexOf(row.effRank as number) : -1;
+                  return filteredRows.map((row) => {
                     return (
                       <Fragment key={row.id}>
                         <BoardRow
                           row={row}
-                          tierBreak={tierBreak}
+                          tierBreak={false}
+                          band={bandByPlayer.get(row.id) ?? null}
                           playerStickyLeft={playerStickyLeft}
                           showPos={false}
                           // Pre-draft pricing view: no live-auction columns.
@@ -961,20 +889,6 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
                           onMeta={setMeta}
                           onRate={setInterest}
                         />
-                        {breakIndex !== -1 && (
-                          <TierDivider
-                            pos={posFilter}
-                            colSpan={7}
-                            index={breakIndex}
-                            rank={breaks[breakIndex]}
-                            lower={breakIndex > 0 ? breaks[breakIndex - 1] + 1 : 1}
-                            upper={breakIndex < breaks.length - 1 ? breaks[breakIndex + 1] - 1 : posCount - 1}
-                            breaks={breaks}
-                            color={tierColor(row.tier)}
-                            onChange={setTierBoundary}
-                            onRemove={removeTierBar}
-                          />
-                        )}
                       </Fragment>
                     );
                   });

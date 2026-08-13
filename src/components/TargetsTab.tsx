@@ -4,6 +4,12 @@ import { useMemo, useState } from "react";
 import { Strategy } from "@/lib/data/strategies";
 import {
   assignKeepersToSlots,
+  availableByPos,
+  Band,
+  BAND_COLOR,
+  BAND_SIZE,
+  BAND_HI,
+  bandsAt,
   Board,
   BoardRow as BoardRowType,
   FIXED_SLOT_POS,
@@ -25,10 +31,6 @@ import { styles, chipActive } from "./styles";
 // Slide-in used when a position card changes page.
 const cardPageAnim = `@keyframes cardPageIn { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: none; } }`;
 
-// Reach/Target/Settle are fixed 5-player windows on the availability ladder, so
-// disliking or losing a player slides the next-closest one in.
-const BAND_HI = 1.15; // where "your money buys him" starts (× cluster ceiling)
-const BAND_SIZE = 5;
 
 interface OpenSlot {
   id: string;
@@ -191,15 +193,7 @@ export function TargetsTab({
       }));
   }, [strategy, filled, slotLabels]);
 
-  const availByPos = useMemo(() => {
-    const m: Partial<Record<Pos, BoardRowType[]>> = {};
-    POSITIONS.forEach((pos) => {
-      m[pos] = board.rows
-        .filter((r) => r.pos === pos && r.target != null && !r.isDrafted && !r.isKeeper && r.interest !== "dislike")
-        .sort((a, b) => (b.target as number) - (a.target as number));
-    });
-    return m;
-  }, [board.rows]);
+  const availByPos = useMemo(() => availableByPos(board.rows), [board.rows]);
 
   // Slots priced >= $2 get their own shopping list. Only slots at the *same*
   // price share one — different prices shop different shelves, so they stay
@@ -220,11 +214,10 @@ export function TargetsTab({
         const plan = slots.reduce((s, sl) => s + sl.amount, 0);
         const avail = availByPos[pos] ?? []; // market price desc
 
-        let start = avail.findIndex((r) => (r.target as number) <= hi * BAND_HI);
-        if (start === -1) start = avail.length;
-        const reach = avail.slice(Math.max(0, start - BAND_SIZE), start);
-        const target = avail.slice(start, start + BAND_SIZE);
-        const settle = avail.slice(start + BAND_SIZE, start + 2 * BAND_SIZE);
+        const w = bandsAt(avail, hi);
+        const reach = [...w.reach];
+        const target = [...w.target];
+        const settle = [...w.settle];
 
         // Force-include players you've assigned to this cluster's slots, dropped
         // into whichever band their price falls in, then re-sort each band.
@@ -747,10 +740,10 @@ function sectionRec(pos: Pos, plan: number, marketRead: MarketRead) {
 
 const REC_COLOR = { hot: "#E1524B", cheap: "#4CAF6B", neutral: "#8B92A0" } as const;
 
-const GROUP_META: { key: "reach" | "target" | "settle"; label: string; color: string; note: string }[] = [
-  { key: "reach", label: "REACH", color: "#5B9BD5", note: "above your price — only at a discount" },
-  { key: "target", label: "TARGET", color: "#4CAF6B", note: "your money buys these — go get one" },
-  { key: "settle", label: "SETTLE", color: "#E8A33D", note: "fallback if the room outbids you" },
+const GROUP_META: { key: Band; label: string; color: string; note: string }[] = [
+  { key: "reach", label: "REACH", color: BAND_COLOR.reach, note: "above your price — only at a discount" },
+  { key: "target", label: "TARGET", color: BAND_COLOR.target, note: "your money buys these — go get one" },
+  { key: "settle", label: "SETTLE", color: BAND_COLOR.settle, note: "fallback if the room outbids you" },
 ];
 
 function ClusterBlock({

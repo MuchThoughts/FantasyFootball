@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef } from "react";
-import { BoardRow as BoardRowType, Interest, POS_COLOR, tierColor } from "@/lib/draftLogic";
+import { Band, BAND_COLOR, BoardRow as BoardRowType, Interest, POS_COLOR, tierColor } from "@/lib/draftLogic";
 import { LAST_DRAFT } from "@/lib/data/lastDraft";
 import { usePlayerRating } from "@/hooks/usePlayerRating";
 import { DragHandle } from "./DragHandle";
@@ -27,6 +27,8 @@ interface BoardRowProps {
   row: BoardRowType;
   tierBreak: boolean;
   isTarget: boolean;
+  // Which strategy shopping window this player falls in; tints the rank.
+  band?: Band | null;
   // Row drag-and-drop (rank pinning); absent when the board isn't sorted by rank.
   dragEnabled: boolean;
   dragging: boolean; // this row is being dragged
@@ -70,6 +72,7 @@ export function BoardRow({
   row,
   tierBreak,
   isTarget,
+  band,
   dragEnabled,
   dragging,
   dropEdge,
@@ -178,7 +181,15 @@ export function BoardRow({
       <td style={{ ...styles.td, ...styles.tdSticky, ...dragCol1, ...tBreakStyle, ...stickyBg, ...targetGlow }}>
         <span style={{ display: "inline-flex", alignItems: "center" }}>
           {dragEnabled && <DragHandle onPointerDown={onDragStart} dragging={dragging} />}
-          <span style={{ ...styles.tdMono, fontSize: 11 }}>
+          <span
+            style={{
+              ...styles.tdMono,
+              fontSize: 11,
+              color: band ? BAND_COLOR[band] : undefined,
+              fontWeight: band ? 700 : undefined,
+            }}
+            title={band ? `${band[0].toUpperCase()}${band.slice(1)} for your strategy` : undefined}
+          >
             {row.pos}
             {row.effRank ?? "–"}
           </span>

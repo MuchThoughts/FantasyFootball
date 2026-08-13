@@ -420,20 +420,6 @@ export const styles: Record<string, CSSProperties> = {
     height: 7,
     borderRadius: "50%",
   },
-  tierDivider: {
-    height: 16,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    touchAction: "none",
-    userSelect: "none",
-  },
-  tierDividerHandle: {
-    fontSize: 9,
-    letterSpacing: "0.04em",
-    color: "#171A20",
-    fontWeight: 700,
-  },
   cellInput: {
     width: 42,
     background: "#14171C",

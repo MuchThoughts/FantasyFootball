@@ -541,6 +541,77 @@ export function computeStrategyZones(rows: BoardRow[], strategy: Strategy | unde
     .filter((z) => z.ids.length > 0);
 }
 
+/* ── Strategy shopping bands ──────────────────────────────────────────────────
+ * Reach/Target/Settle are fixed 5-player windows on a position's availability
+ * ladder, so disliking or losing a player slides the next-closest one in. The
+ * Targets tab renders them per slot price; the board tints each player's rank
+ * with the band they land in. Both read this one definition.
+ */
+export type Band = "reach" | "target" | "settle";
+
+export const BAND_HI = 1.15; // where "your money buys him" starts (× slot price)
+export const BAND_SIZE = 5;
+
+export const BAND_COLOR: Record<Band, string> = {
+  reach: "#5B9BD5",
+  target: "#4CAF6B",
+  settle: "#E8A33D",
+};
+
+// Players still gettable at each position, priced high -> low.
+export function availableByPos(rows: BoardRow[]): Record<Pos, BoardRow[]> {
+  const m = {} as Record<Pos, BoardRow[]>;
+  POSITIONS.forEach((pos) => {
+    m[pos] = rows
+      .filter((r) => r.pos === pos && r.target != null && !r.isDrafted && !r.isKeeper && r.interest !== "dislike")
+      .sort((a, b) => (b.target as number) - (a.target as number));
+  });
+  return m;
+}
+
+// The three windows around one slot price on an availability ladder.
+export function bandsAt(avail: BoardRow[], price: number): Record<Band, BoardRow[]> {
+  let start = avail.findIndex((r) => (r.target as number) <= price * BAND_HI);
+  if (start === -1) start = avail.length;
+  return {
+    reach: avail.slice(Math.max(0, start - BAND_SIZE), start),
+    target: avail.slice(start, start + BAND_SIZE),
+    settle: avail.slice(start + BAND_SIZE, start + 2 * BAND_SIZE),
+  };
+}
+
+// Which band each player falls in for the active strategy, considering every
+// open slot price. A player in range of several slots keeps the best standing:
+// Target beats Reach, Reach beats Settle.
+export function playerBands(
+  strategy: Strategy | undefined,
+  rows: BoardRow[],
+  filledSlotIds: Set<string>
+): Map<string, Band> {
+  const out = new Map<string, Band>();
+  if (!strategy) return out;
+  const avail = availableByPos(rows);
+  const priority: Record<Band, number> = { target: 0, reach: 1, settle: 2 };
+
+  POSITIONS.forEach((pos) => {
+    const prices = new Set(
+      strategy.slots
+        .filter((sl) => sl.pos === pos && !filledSlotIds.has(sl.id))
+        .map((sl) => Number(sl.amount) || 0)
+    );
+    prices.forEach((price) => {
+      const bands = bandsAt(avail[pos] ?? [], price);
+      (Object.keys(bands) as Band[]).forEach((band) => {
+        bands[band].forEach((r) => {
+          const cur = out.get(r.id);
+          if (cur === undefined || priority[band] < priority[cur]) out.set(r.id, band);
+        });
+      });
+    });
+  });
+  return out;
+}
+
 export interface StrategyTargets {
   targetIds: Set<string>;
   sums: Record<string, number>;
