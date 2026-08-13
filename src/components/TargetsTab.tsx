@@ -250,12 +250,27 @@ export function TargetsTab({
     return out;
   }, [openSlots, availByPos, assignments]);
 
-  // $1 endgame slots — editable, plus any players you've curated onto them.
+  // $1 endgame slots. Each gets a shortlist: anyone you've pinned to it first,
+  // then players you've Loved/Liked who are actually gettable at this price,
+  // then the highest-ranked players left in that price range.
   const fliers = useMemo(() => openSlots.filter((s) => s.amount < 2), [openSlots]);
   const assignedByFlier = useMemo(() => {
     const m: Record<string, BoardRowType[]> = {};
     for (const f of fliers) {
-      m[f.id] = (availByPos[f.pos] ?? []).filter((r) => assignments[r.id] === f.id);
+      const avail = availByPos[f.pos] ?? []; // price desc
+      const pinned = avail.filter((r) => assignments[r.id] === f.id);
+      const taken = new Set(pinned.map((r) => r.id));
+
+      const cap = Math.max(f.amount + 1, 2);
+      const inRange = avail.filter((r) => !taken.has(r.id) && (r.target as number) <= cap);
+      // Nothing that cheap on the board yet — fall back to the cheapest players.
+      const pool = inRange.length > 0 ? inRange : avail.filter((r) => !taken.has(r.id)).slice(-BAND_SIZE);
+
+      const byRank = (a: BoardRowType, b: BoardRowType) => (a.effRank ?? Infinity) - (b.effRank ?? Infinity);
+      const liked = pool.filter((r) => r.interest === "love" || r.interest === "like").sort(byRank);
+      const rest = pool.filter((r) => r.interest !== "love" && r.interest !== "like").sort(byRank);
+
+      m[f.id] = [...pinned, ...liked, ...rest].slice(0, BAND_SIZE);
     }
     return m;
   }, [fliers, availByPos, assignments]);
@@ -677,14 +692,75 @@ function SlotEditor({
         </select>
       )}
       <span style={{ fontSize: 11, color: "#5B6270" }}>$</span>
+      <PriceInput value={slot.amount} onCommit={(v) => onSlotAmount(strategyId, slot.id, v)} />
+    </div>
+  );
+}
+
+/*
+ * Committing a price on every keystroke re-grouped the slot pages mid-type, so
+ * typing "28" repriced on the "2" and shuffled the card underneath you. The
+ * value is now held locally while you type and only committed on OK, Enter, or
+ * blur; Escape abandons the edit.
+ */
+function PriceInput({ value, onCommit }: { value: number; onCommit: (v: string) => void }) {
+  const [focused, setFocused] = useState(false);
+  const [draft, setDraft] = useState<string | null>(null);
+
+  const commit = () => {
+    const v = draft;
+    setDraft(null);
+    if (v === null) return;
+    const trimmed = v.trim();
+    if (trimmed !== "" && Number(trimmed) !== value) onCommit(trimmed);
+  };
+
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
       <input
         style={{ ...styles.cellInput, width: 46, fontWeight: 700 }}
         type="number"
         min={0}
-        value={slot.amount}
-        onChange={(e) => onSlotAmount(strategyId, slot.id, e.target.value)}
+        value={draft ?? String(value)}
+        onChange={(e) => setDraft(e.target.value)}
+        onFocus={(e) => {
+          setFocused(true);
+          const el = e.target as HTMLInputElement;
+          requestAnimationFrame(() => el.select());
+        }}
+        onBlur={() => {
+          setFocused(false);
+          commit();
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+          else if (e.key === "Escape") {
+            setDraft(null);
+            (e.target as HTMLInputElement).blur();
+          }
+        }}
       />
-    </div>
+      {focused && (
+        <button
+          // Keep focus off the button so blur (and its commit) doesn't fire
+          // before the click lands.
+          onPointerDown={(e) => e.preventDefault()}
+          onClick={commit}
+          style={{
+            background: "#2E7D46",
+            border: "none",
+            borderRadius: 4,
+            color: "#EDEEF0",
+            fontSize: 11,
+            fontWeight: 700,
+            padding: "3px 7px",
+            cursor: "pointer",
+          }}
+        >
+          OK
+        </button>
+      )}
+    </span>
   );
 }
 
@@ -829,7 +905,9 @@ function FlierBlock({
     <div>
       <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: 0.4, color: "#8B92A0", marginBottom: 6 }}>
         {slots.map((s) => s.label).join(" + ")}{" "}
-        <span style={{ color: "#5B6270", fontWeight: 400 }}>· curate darts by pinning players from the Board</span>
+        <span style={{ color: "#5B6270", fontWeight: 400 }}>
+          · your Loved/Liked darts at this price first, then the best left in range
+        </span>
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {slots.map((f) => (

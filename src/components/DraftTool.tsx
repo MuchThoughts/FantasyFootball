@@ -550,8 +550,10 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
           if (s.id !== strategyId) return s;
           const idx = s.slots.findIndex((sl) => sl.id === slotId);
           if (idx === -1) return s;
-          const amount = suggestSlotAmount(s.slots, idx, newPos);
-          return { ...s, slots: s.slots.map((sl, i) => (i === idx ? { ...sl, pos: newPos as never, amount } : sl)) };
+          // Keep the slot's dollar amount. Re-suggesting a market price for the
+          // new position turned a cheap bench slot into a mid-tier one, which
+          // silently reshuffled every other slot's price rank at that position.
+          return { ...s, slots: s.slots.map((sl, i) => (i === idx ? { ...sl, pos: newPos as never } : sl)) };
         }),
       }));
     },
