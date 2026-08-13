@@ -38,9 +38,13 @@ interface BoardRowProps {
   // How far right the Player column's sticky offset must sit to clear the Rank
   // column plus however many Plan zone columns precede it (0 when there are none).
   playerStickyLeft: number;
-  // Column toggles (Board shows all; Targets hides Pos/Paid and adds Act).
+  // Column toggles. Targets hides Pos/Paid and adds Act; the Board is a
+  // pre-draft pricing/ranking view, so it hides the live-auction columns
+  // (Tgt/Live/Paid).
   showPos?: boolean; // default true
   showPaid?: boolean; // default true
+  showTgt?: boolean; // default true
+  showLive?: boolean; // default true
   // When defined, render an "Act" cell (actual historical draft cost for this
   // pos+rank) just left of Tgt. undefined = no Act column at all.
   actCost?: number | null;
@@ -74,6 +78,8 @@ export function BoardRow({
   playerStickyLeft,
   showPos = true,
   showPaid = true,
+  showTgt = true,
+  showLive = true,
   actCost,
   finish2025,
   pts2025,
@@ -291,20 +297,24 @@ export function BoardRow({
           {actCost != null ? `$${actCost}` : "—"}
         </td>
       )}
-      <td style={{ ...styles.td, ...styles.tdMono, ...tBreakStyle, ...bgStyle }}>{row.isKeeper ? "—" : row.target}</td>
-      <td
-        style={{
-          ...styles.td,
-          ...styles.tdMono,
-          ...tBreakStyle,
-          ...bgStyle,
-          fontWeight: liveAlertColor ? 700 : 400,
-          color: dimmed ? "#4A5160" : liveAlertColor || "#8B92A0",
-        }}
-        title={liveAlertLabel}
-      >
-        {row.isKeeper || row.isDrafted ? "—" : row.live}
-      </td>
+      {showTgt && (
+        <td style={{ ...styles.td, ...styles.tdMono, ...tBreakStyle, ...bgStyle }}>{row.isKeeper ? "—" : row.target}</td>
+      )}
+      {showLive && (
+        <td
+          style={{
+            ...styles.td,
+            ...styles.tdMono,
+            ...tBreakStyle,
+            ...bgStyle,
+            fontWeight: liveAlertColor ? 700 : 400,
+            color: dimmed ? "#4A5160" : liveAlertColor || "#8B92A0",
+          }}
+          title={liveAlertLabel}
+        >
+          {row.isKeeper || row.isDrafted ? "—" : row.live}
+        </td>
+      )}
       <td style={{ ...styles.td, ...tBreakStyle, ...bgStyle }}>
         <input
           style={styles.cellInput}

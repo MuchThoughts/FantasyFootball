@@ -252,8 +252,6 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
         return (b.live ?? -1) - (a.live ?? -1);
       }
       if (sortKey === "adp") return a.adp - b.adp;
-      if (sortKey === "target") return (b.target ?? 0) - (a.target ?? 0);
-      if (sortKey === "live") return (b.live ?? -1) - (a.live ?? -1);
       if (sortKey === "pos") return a.pos.localeCompare(b.pos) || a.adp - b.adp;
       if (sortKey === "tier") return a.pos.localeCompare(b.pos) || (a.tier ?? 0) - (b.tier ?? 0) || a.adp - b.adp;
       return a.adp - b.adp;
@@ -910,20 +908,9 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
                   <th style={styles.th} title="What this positional rank actually cost in your league (weighted 3-yr price)">
                     Act
                   </th>
-                  <th
-                    style={{ ...styles.th, cursor: "pointer", color: sortKey === "target" ? "#EDEEF0" : "#8B92A0" }}
-                    onClick={() => setSortKey("target")}
-                  >
-                    Tgt{sortKey === "target" ? " ▾" : ""}
+                  <th style={styles.th} title="The most you're willing to pay for this player">
+                    Max
                   </th>
-                  <th
-                    style={{ ...styles.th, cursor: "pointer", color: sortKey === "live" ? "#EDEEF0" : "#8B92A0" }}
-                    onClick={() => setSortKey("live")}
-                  >
-                    Live{sortKey === "live" ? " ▾" : ""}
-                  </th>
-                  <th style={styles.th}>Max</th>
-                  <th style={styles.th}>Paid</th>
                 </tr>
               </thead>
               <tbody>
@@ -941,6 +928,10 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
                           tierBreak={tierBreak}
                           playerStickyLeft={playerStickyLeft}
                           showPos={false}
+                          // Pre-draft pricing view: no live-auction columns.
+                          showTgt={false}
+                          showLive={false}
+                          showPaid={false}
                           actCost={rawCostAt(row.pos, row.effRank)}
                           finish2025={FINISH_2025[row.id] ?? null}
                           pts2025={points2025ForFinish(FINISH_2025[row.id])}
@@ -971,7 +962,7 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
                         {breakIndex !== -1 && (
                           <TierDivider
                             pos={posFilter}
-                            colSpan={10}
+                            colSpan={7}
                             index={breakIndex}
                             rank={breaks[breakIndex]}
                             lower={breakIndex > 0 ? breaks[breakIndex - 1] + 1 : 1}
