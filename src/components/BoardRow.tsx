@@ -186,54 +186,12 @@ export function BoardRow({
       </td>
       {zoneCells}
       <td style={{ ...styles.td, ...styles.tdSticky2, ...tBreakStyle, ...stickyBg, left: playerStickyLeft }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            {nameClickable ? (
-              <div
-                {...handlers}
-                ref={nameRef}
-                title="Click = Like, double-click = Love, press and hold = menu (dislike / assign to a slot)"
-                style={{
-                  cursor: "pointer",
-                  borderRadius: 4,
-                  padding: "1px 3px",
-                  margin: "-1px -3px",
-                  background: pressing ? "rgba(232, 163, 61, 0.30)" : "transparent",
-                  transition: "background 0.1s ease",
-                  userSelect: "none",
-                  WebkitUserSelect: "none",
-                  touchAction: "manipulation",
-                }}
-              >
-                <div style={nameStyle}>
-                  {row.name}
-                  {row.team && <span style={{ color: "#7A828F", fontWeight: 400, fontSize: "0.88em" }}> {row.team}</span>}
-                </div>
-                <div style={styles.tdPlayerMeta}>
-                  ADP {row.adp}
-                  {assignedTag}
-                  {keeperTag}
-                  {lastDraftTag}
-                </div>
-              </div>
-            ) : (
-              <>
-                <div style={nameStyle}>
-                  {row.name}
-                  {row.team && <span style={{ color: "#7A828F", fontWeight: 400, fontSize: "0.88em" }}> {row.team}</span>}
-                </div>
-                <div style={styles.tdPlayerMeta}>
-                  ADP {row.adp}
-                  {assignedTag}
-                  {keeperTag}
-                  {lastDraftTag}
-                </div>
-              </>
-            )}
-          </div>
-          {onOpenNote && (
-            // Sibling of the rating handlers, so tapping the icon never marks
-            // a Like. Filled + blue once the player has a note.
+        {(() => {
+          // The note icon sits inline at the end of the name line, so it stays
+          // tight to the name no matter how long the ADP line below runs. It
+          // stops click/pointerdown propagation, so tapping it opens the note
+          // editor without also rating the player.
+          const noteBtn = onOpenNote && (
             <button
               ref={noteRef}
               onClick={(e) => {
@@ -248,7 +206,7 @@ export function BoardRow({
                 background: "transparent",
                 border: "none",
                 cursor: "pointer",
-                padding: "2px 3px",
+                padding: "1px 2px",
                 fontSize: 12,
                 lineHeight: 1,
                 color: hasNote ? "#5B9BD5" : "#3A3F4A",
@@ -256,8 +214,47 @@ export function BoardRow({
             >
               {hasNote ? "▤" : "▢"}
             </button>
-          )}
-        </div>
+          );
+          const content = (
+            <>
+              <div style={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0 }}>
+                <div style={nameStyle}>
+                  {row.name}
+                  {row.team && <span style={{ color: "#7A828F", fontWeight: 400, fontSize: "0.88em" }}> {row.team}</span>}
+                </div>
+                {noteBtn}
+              </div>
+              <div style={styles.tdPlayerMeta}>
+                ADP {row.adp}
+                {assignedTag}
+                {keeperTag}
+                {lastDraftTag}
+              </div>
+            </>
+          );
+          return nameClickable ? (
+            <div
+              {...handlers}
+              ref={nameRef}
+              title="Click = Like, double-click = Love, press and hold = menu (dislike / assign to a slot)"
+              style={{
+                cursor: "pointer",
+                borderRadius: 4,
+                padding: "1px 3px",
+                margin: "-1px -3px",
+                background: pressing ? "rgba(232, 163, 61, 0.30)" : "transparent",
+                transition: "background 0.1s ease",
+                userSelect: "none",
+                WebkitUserSelect: "none",
+                touchAction: "manipulation",
+              }}
+            >
+              {content}
+            </div>
+          ) : (
+            content
+          );
+        })()}
       </td>
       {finish2025 !== undefined && (
         <td
