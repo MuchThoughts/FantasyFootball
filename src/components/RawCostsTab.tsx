@@ -3,6 +3,7 @@
 import { RAW_DRAFT_COSTS, RawCostRow } from "@/lib/data/rawDraftCosts";
 import { points2025At } from "@/lib/data/points2025";
 import { POS_COLOR, POSITIONS, Pos } from "@/lib/draftLogic";
+import { SPEND_CURVES, VERDICT_META } from "@/lib/spendCurve";
 import { styles } from "./styles";
 
 function fmtPrice(v: number): string {
@@ -44,10 +45,100 @@ export function RawCostsTab() {
         <b>Pts/$</b> divides the two — how much scoring a dollar buys at that slot, which is where the cheap end of
         each position shows its edge. Hover any row for the year-by-year price breakdown.
       </div>
+      <SpendSummary />
+
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-start" }}>
         {POSITIONS.map((pos) => (
           <PositionTable key={pos} pos={pos} rows={RAW_DRAFT_COSTS[pos] ?? []} />
         ))}
+      </div>
+    </div>
+  );
+}
+
+// Where spending up actually pays, per position. Everything here is derived from
+// the same two tables below (price by rank, 2025 points by rank) — see
+// lib/spendCurve.ts for the replacement-level and slope definitions.
+function SpendSummary() {
+  const num = (v: number | null) => (v == null ? "—" : v.toFixed(1));
+  return (
+    <div style={{ ...styles.panel, padding: 12, marginBottom: 12 }}>
+      <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 0.4, color: "#8B92A0", marginBottom: 2 }}>
+        WHERE IT&apos;S WORTH SPENDING UP
+      </div>
+      <div style={{ fontSize: 11, color: "#5B6270", marginBottom: 8, lineHeight: 1.5 }}>
+        Points per dollar always flatters cheap players, so this measures two better things.{" "}
+        <b style={{ color: "#8B92A0" }}>Edge</b> is what the #1 player adds over the last startable one at that
+        position — the size of the prize. <b style={{ color: "#8B92A0" }}>Top $</b> and{" "}
+        <b style={{ color: "#8B92A0" }}>Late $</b> are points gained per <i>extra</i> dollar when you move up within
+        the top tier vs. up from replacement. Whichever is bigger is where your money works harder.
+      </div>
+
+      <div style={styles.tableWrap}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+          <thead>
+            <tr style={{ color: "#5B6270", fontSize: 10 }}>
+              <th style={{ textAlign: "left", fontWeight: 500, paddingBottom: 4 }}>Pos</th>
+              <th style={{ textAlign: "left", fontWeight: 500, paddingBottom: 4 }}>Verdict</th>
+              <th style={{ textAlign: "right", fontWeight: 500, paddingBottom: 4 }} title="Points the #1 player adds over the last startable one">
+                Edge
+              </th>
+              <th style={{ textAlign: "right", fontWeight: 500, paddingBottom: 4 }} title="Points per extra dollar moving up into the #1 slot">
+                Top $
+              </th>
+              <th style={{ textAlign: "right", fontWeight: 500, paddingBottom: 4 }} title="Points per extra dollar moving up from replacement">
+                Late $
+              </th>
+              <th style={{ textAlign: "left", fontWeight: 500, paddingBottom: 4, paddingLeft: 10 }} title="Biggest one-rank scoring drop among startable slots — buy on the high side">
+                Biggest cliff
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {SPEND_CURVES.map((c) => {
+              const meta = VERDICT_META[c.verdict];
+              const topBest = c.topSlope != null && c.lateSlope != null && c.topSlope > c.lateSlope;
+              const cell = { padding: "3px 0", borderBottom: "1px solid #20242C", fontFamily: "'IBM Plex Mono', monospace" };
+              return (
+                <tr key={c.pos} title={meta.blurb}>
+                  <td style={{ ...cell, textAlign: "left" }}>
+                    <span style={{ ...styles.posTagSm, background: POS_COLOR[c.pos] }}>{c.pos}</span>
+                  </td>
+                  <td style={{ ...cell, textAlign: "left", fontWeight: 700, fontSize: 10, color: meta.color, paddingRight: 8 }}>
+                    {meta.label}
+                  </td>
+                  <td style={{ ...cell, textAlign: "right", color: "#EDEEF0" }}>+{c.eliteEdge.toFixed(0)}</td>
+                  <td style={{ ...cell, textAlign: "right", color: topBest ? "#4CAF6B" : "#8B92A0", fontWeight: topBest ? 700 : 400 }}>
+                    {num(c.topSlope)}
+                  </td>
+                  <td style={{ ...cell, textAlign: "right", color: !topBest ? "#4CAF6B" : "#8B92A0", fontWeight: !topBest ? 700 : 400 }}>
+                    {num(c.lateSlope)}
+                  </td>
+                  <td style={{ ...cell, textAlign: "left", paddingLeft: 10, color: "#C6CAD2", fontSize: 11 }}>
+                    {c.cliff ? (
+                      <>
+                        {c.pos}
+                        {c.cliff.from}→{c.pos}
+                        {c.cliff.to}{" "}
+                        <span style={{ color: "#E1524B" }}>−{c.cliff.drop.toFixed(0)}</span>{" "}
+                        <span style={{ color: "#5B6270" }}>pts, buy at ${c.cliff.price}</span>
+                      </>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <div style={{ fontSize: 11, color: "#5B6270", marginTop: 8, lineHeight: 1.5 }}>
+        Read it as the size of the prize (Edge) against the price of chasing it (Top $ vs Late $): a big edge with a
+        weak Top $ means the position matters but the premium doesn&apos;t. One caveat — these are 2025{" "}
+        <i>finishes</i>, so they show what each rank was worth, not who you can identify on draft day. Treat them as
+        the prize on offer and discount by your confidence; being wrong at the cheap end costs $12 instead of $60.
       </div>
     </div>
   );

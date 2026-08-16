@@ -7,7 +7,11 @@ export function points2025At(pos: string, rank: number | null | undefined): numb
   const arr = POINTS_2025[pos];
   if (!arr || arr.length === 0) return null;
   const v = arr[rank - 1];
-  return v !== undefined ? v : null;
+  // A 0 in the source is a hole, not a season: no fantasy player or defense
+  // finishes a year on exactly zero, and the neighbouring ranks run straight
+  // through it (DEF: 136, [0], 135). Report it as missing so it can't fake a
+  // scoring cliff or a 0.0 points-per-dollar.
+  return v !== undefined && v !== 0 ? v : null;
 }
 
 // A player's 2025 total from his finish string ("RB39" -> the RB39's points).
