@@ -13,6 +13,14 @@ function fmtPts(v: number): string {
   return v.toFixed(1).replace(/\.0$/, "");
 }
 
+// Points per dollar. Cheap slots reach into the hundreds, so keep it to one
+// decimal below 100 and drop it above.
+function fmtPtsPerDollar(pts: number, price: number): string {
+  if (price <= 0) return "—";
+  const v = pts / price;
+  return v >= 100 ? String(Math.round(v)) : v.toFixed(1);
+}
+
 // Hover breakdown: each year's raw figure, flagging keeper slots, plus which
 // method produced the final price.
 function rowTitle(row: RawCostRow): string {
@@ -32,8 +40,9 @@ export function RawCostsTab() {
         70%, 2024 at 25%, 2023 at 5%. When a keeper occupied a slot in a year (their price isn&apos;t a market
         price), that year is ignored and the slot shows the most recent real auction price instead — those rows are
         marked †. <b>Pts</b> is what that rank actually scored in 2025 (FantasyPros season total) — the assumption
-        being that whatever rank you pay for at the draft, that&apos;s roughly the season you should expect. Hover
-        any row for the year-by-year price breakdown.
+        being that whatever rank you pay for at the draft, that&apos;s roughly the season you should expect.{" "}
+        <b>Pts/$</b> divides the two — how much scoring a dollar buys at that slot, which is where the cheap end of
+        each position shows its edge. Hover any row for the year-by-year price breakdown.
       </div>
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-start" }}>
         {POSITIONS.map((pos) => (
@@ -46,7 +55,7 @@ export function RawCostsTab() {
 
 function PositionTable({ pos, rows }: { pos: Pos; rows: RawCostRow[] }) {
   return (
-    <div style={{ ...styles.panel, flex: "1 1 150px", minWidth: 150, padding: 10 }}>
+    <div style={{ ...styles.panel, flex: "1 1 172px", minWidth: 172, padding: 10 }}>
       <div style={{ marginBottom: 6 }}>
         <span style={{ ...styles.posTagSm, background: POS_COLOR[pos] }}>{pos}</span>
       </div>
@@ -57,6 +66,12 @@ function PositionTable({ pos, rows }: { pos: Pos; rows: RawCostRow[] }) {
             <th style={{ textAlign: "right", fontWeight: 500, paddingBottom: 4 }}>Price</th>
             <th style={{ textAlign: "right", fontWeight: 500, paddingBottom: 4 }} title="2025 season-ending FPTS for this rank">
               Pts
+            </th>
+            <th
+              style={{ textAlign: "right", fontWeight: 500, paddingBottom: 4 }}
+              title="2025 points divided by this slot's price — scoring per dollar spent"
+            >
+              Pts/$
             </th>
           </tr>
         </thead>
@@ -105,6 +120,18 @@ function PositionTable({ pos, rows }: { pos: Pos; rows: RawCostRow[] }) {
                   }}
                 >
                   {pts != null ? fmtPts(pts) : "—"}
+                </td>
+                <td
+                  style={{
+                    textAlign: "right",
+                    padding: "2px 0",
+                    borderBottom: "1px solid #20242C",
+                    fontFamily: "'IBM Plex Mono', monospace",
+                    color: "#C6CAD2",
+                    fontSize: 11,
+                  }}
+                >
+                  {pts != null ? fmtPtsPerDollar(pts, r.price) : "—"}
                 </td>
               </tr>
             );
