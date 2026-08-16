@@ -216,6 +216,9 @@ export interface DraftData {
   // strategy), so they survive ranking uploads, strategy resets, and profile
   // resets — they're your own research, never derived data.
   notes: Record<string, string>;
+  // One free-text scratchpad for the whole profile — plans, reminders, trade
+  // ideas. Separate from `notes`, which is keyed per player.
+  scratchpad: string;
   // Uploaded ranking lists plus which source/blend/overrides are active —
   // see rankings.ts. The active ranking drives board order and price targets.
   rankingSources: RankingSource[];

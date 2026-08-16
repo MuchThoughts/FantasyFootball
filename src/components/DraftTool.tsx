@@ -43,6 +43,7 @@ import { StrategyAdvisor } from "./StrategyAdvisor";
 import { InsightsTab } from "./InsightsTab";
 import { OffensesTab } from "./OffensesTab";
 import { RawCostsTab } from "./RawCostsTab";
+import { NotesTab } from "./NotesTab";
 import { TargetsTab } from "./TargetsTab";
 
 const PROFILE_STORAGE_KEY = "ffauction2026:profileId";
@@ -119,7 +120,9 @@ interface DraftToolProps {
 function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: DraftToolProps) {
   const { data, update, loaded, saveState } = useDraftState(profileId);
 
-  const [tab, setTab] = useState<"board" | "targets" | "rankings" | "drafters" | "offenses" | "rawcosts">("board");
+  const [tab, setTab] = useState<"board" | "targets" | "rankings" | "drafters" | "offenses" | "rawcosts" | "notes">(
+    "board"
+  );
   const [posFilter, setPosFilter] = useState("ALL");
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState("adp");
@@ -673,6 +676,9 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
         <button style={tab === "rawcosts" ? styles.tabActive : styles.tab} onClick={() => setTab("rawcosts")}>
           Raw Draft Costs
         </button>
+        <button style={tab === "notes" ? styles.tabActive : styles.tab} onClick={() => setTab("notes")}>
+          Notes
+        </button>
       </div>
 
       {tab === "board" && (
@@ -944,6 +950,13 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
       )}
 
       {tab === "rawcosts" && <RawCostsTab />}
+
+      {tab === "notes" && (
+        <NotesTab
+          value={d.scratchpad ?? ""}
+          onChange={(text) => update((prev) => ({ ...prev, scratchpad: text }))}
+        />
+      )}
 
       {slotMenu && (
         <SlotMenu

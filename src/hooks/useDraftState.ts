@@ -19,6 +19,7 @@ export function defaultDraftData(): DraftData {
     keeperPicks: {},
     assignmentsByStrategy: {},
     notes: {},
+    scratchpad: "",
     rankingSources: [],
     ranking: defaultRankingConfig(),
   };
