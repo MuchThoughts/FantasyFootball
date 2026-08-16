@@ -3,7 +3,7 @@
 import { RAW_DRAFT_COSTS, RawCostRow } from "@/lib/data/rawDraftCosts";
 import { points2025At } from "@/lib/data/points2025";
 import { POS_COLOR, POSITIONS, Pos } from "@/lib/draftLogic";
-import { SPEND_CURVES, VERDICT_META } from "@/lib/spendCurve";
+import { parAt, replacementRankFor, SPEND_CURVES, VERDICT_META } from "@/lib/spendCurve";
 import { styles } from "./styles";
 
 function fmtPrice(v: number): string {
@@ -14,11 +14,12 @@ function fmtPts(v: number): string {
   return v.toFixed(1).replace(/\.0$/, "");
 }
 
-// Points per dollar. Cheap slots reach into the hundreds, so keep it to one
-// decimal below 100 and drop it above.
-function fmtPtsPerDollar(pts: number, price: number): string {
-  if (price <= 0) return "—";
-  const v = pts / price;
+// Points-above-replacement per dollar. At or below replacement there is no edge
+// to buy — and dividing a negative by a $1 price throws out wild numbers — so
+// those slots read as a dash rather than a false precision.
+function fmtParPerDollar(par: number | null, price: number): string {
+  if (par == null || price <= 0 || par <= 0) return "—";
+  const v = par / price;
   return v >= 100 ? String(Math.round(v)) : v.toFixed(1);
 }
 
@@ -42,8 +43,11 @@ export function RawCostsTab() {
         price), that year is ignored and the slot shows the most recent real auction price instead — those rows are
         marked †. <b>Pts</b> is what that rank actually scored in 2025 (FantasyPros season total) — the assumption
         being that whatever rank you pay for at the draft, that&apos;s roughly the season you should expect.{" "}
-        <b>Pts/$</b> divides the two — how much scoring a dollar buys at that slot, which is where the cheap end of
-        each position shows its edge. Hover any row for the year-by-year price breakdown.
+        <b>PAR/$</b> is what actually decides a bid: points <i>above replacement</i> per dollar — this rank&apos;s
+        points minus the last startable player&apos;s, divided by the price. Raw points per dollar always flatters
+        $1 players; measuring from replacement asks the real question, how much better than free is this, per
+        dollar. Slots at or past replacement show a dash — there&apos;s no edge left to buy. Hover any row for the
+        year-by-year price breakdown.
       </div>
       <SpendSummary />
 
@@ -160,15 +164,16 @@ function PositionTable({ pos, rows }: { pos: Pos; rows: RawCostRow[] }) {
             </th>
             <th
               style={{ textAlign: "right", fontWeight: 500, paddingBottom: 4 }}
-              title="2025 points divided by this slot's price — scoring per dollar spent"
+              title={`Points above replacement per dollar: (this rank's 2025 points − ${pos}${replacementRankFor(pos) ?? "?"}'s) ÷ price. A dash means this slot is at or past replacement.`}
             >
-              Pts/$
+              PAR/$
             </th>
           </tr>
         </thead>
         <tbody>
           {rows.map((r) => {
             const pts = points2025At(pos, r.rank);
+            const par = parAt(pos, r.rank);
             return (
               <tr key={r.rank} title={rowTitle(r)} style={{ cursor: "help" }}>
                 <td
@@ -218,11 +223,11 @@ function PositionTable({ pos, rows }: { pos: Pos; rows: RawCostRow[] }) {
                     padding: "2px 0",
                     borderBottom: "1px solid #20242C",
                     fontFamily: "'IBM Plex Mono', monospace",
-                    color: "#C6CAD2",
+                    color: par != null && par > 0 ? "#4CAF6B" : "#4A5160",
                     fontSize: 11,
                   }}
                 >
-                  {pts != null ? fmtPtsPerDollar(pts, r.price) : "—"}
+                  {fmtParPerDollar(par, r.price)}
                 </td>
               </tr>
             );

@@ -46,6 +46,24 @@ export interface SpendCurve {
   verdict: Verdict;
 }
 
+/** The replacement rank actually used for a position, after clamping to the
+ *  deepest rank we have prices for (DEF doesn't run 12 deep). */
+export function replacementRankFor(pos: Pos): number | null {
+  const rows = RAW_DRAFT_COSTS[pos] ?? [];
+  if (rows.length === 0) return null;
+  return Math.min(REPLACEMENT_RANK[pos], rows[rows.length - 1].rank);
+}
+
+/** Points this rank adds over the last startable player at the position.
+ *  Negative below replacement — you could have had that production for ~$1. */
+export function parAt(pos: Pos, rank: number | null | undefined): number | null {
+  if (rank == null) return null;
+  const repl = replacementRankFor(pos);
+  const pts = points2025At(pos, rank);
+  const base = repl != null ? points2025At(pos, repl) : null;
+  return pts != null && base != null ? pts - base : null;
+}
+
 function at(pos: Pos, rank: number): { price: number; pts: number } | null {
   const row = (RAW_DRAFT_COSTS[pos] ?? []).find((r) => r.rank === rank);
   const pts = points2025At(pos, rank);
