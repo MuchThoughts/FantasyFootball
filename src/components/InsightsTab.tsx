@@ -17,16 +17,30 @@ export function InsightsTab({ keeperPicks, marketByUid, onToggleKeeper }: Insigh
   return (
     <div>
       <CheckedKeepers keeperPicks={keeperPicks} />
-      <div style={styles.emptyState}>
-        Built from your league&apos;s 2023–2025 auction results and the official keeper sheet. Keeper costs shown
-        are 2026 prices (last salary + $5, undrafted = $10); a player can only be kept two years running. Value =
-        market − keeper cost, where <b>market is the projected draft cost for the player&apos;s absolute positional
-        rank</b> — if he&apos;s the RB19, market is what your league&apos;s RB19 slot has actually gone for. Ranks
-        never shift when players above are kept or drafted; it&apos;s the same rank and raw draft-cost data as the
-        Board&apos;s RK and Act columns. The checkboxes ARE the keeper designation: checked players come off the
-        board (tinted orange), their cost is committed against the auction pool, and your own checks fill your
-        strategy slots.
-      </div>
+      <details style={{ ...styles.playerCard, marginBottom: 6, padding: "8px 10px" }}>
+        <summary
+          style={{
+            cursor: "pointer",
+            fontSize: 11,
+            fontWeight: 600,
+            letterSpacing: 0.4,
+            color: "#8B92A0",
+            listStyle: "none",
+          }}
+        >
+          HOW THESE NUMBERS WORK
+        </summary>
+        <div style={{ fontSize: 12, color: "#8B92A0", lineHeight: 1.55, marginTop: 8 }}>
+          Built from your league&apos;s 2023–2025 auction results and the official keeper sheet. Keeper costs shown
+          are 2026 prices (last salary + $5, undrafted = $10); a player can only be kept two years running. Value =
+          market − keeper cost, where <b>market is the projected draft cost for the player&apos;s absolute positional
+          rank</b> — if he&apos;s the RB19, market is what your league&apos;s RB19 slot has actually gone for. Ranks
+          never shift when players above are kept or drafted; it&apos;s the same rank and raw draft-cost data as the
+          Board&apos;s RK and Act columns. The checkboxes ARE the keeper designation: checked players come off the
+          board (tinted orange), their cost is committed against the auction pool, and your own checks fill your
+          strategy slots.
+        </div>
+      </details>
       <LeagueBaseline />
       <div style={styles.list}>
         {OWNER_INSIGHTS.map((d) => (
