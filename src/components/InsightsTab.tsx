@@ -16,7 +16,7 @@ interface InsightsTabProps {
 export function InsightsTab({ keeperPicks, marketByUid, onToggleKeeper }: InsightsTabProps) {
   return (
     <div>
-      <CheckedKeepers keeperPicks={keeperPicks} />
+      <CheckedKeepers keeperPicks={keeperPicks} marketByUid={marketByUid} onToggleKeeper={onToggleKeeper} />
       <div style={styles.emptyState}>
         Built from your league&apos;s 2023–2025 auction results and the official keeper sheet. Keeper costs shown
         are 2026 prices (last salary + $5, undrafted = $10); a player can only be kept two years running. Value =
@@ -40,11 +40,29 @@ export function InsightsTab({ keeperPicks, marketByUid, onToggleKeeper }: Insigh
 // Every keeper you've checked across all owners, grouped by position — a running
 // picture of who's leaving the auction pool (and at what keeper cost, which we
 // already know from the sheet, so nothing here needs to be typed in).
-function CheckedKeepers({ keeperPicks }: { keeperPicks: Record<string, boolean> }) {
+function CheckedKeepers({
+  keeperPicks,
+  marketByUid,
+  onToggleKeeper,
+}: {
+  keeperPicks: Record<string, boolean>;
+  marketByUid: Map<string, number>;
+  onToggleKeeper: (playerUid: string, next: boolean) => void;
+}) {
   const picked = KEEPER_CANDIDATES.filter((c) => isExpectedKeeper(c.uid, keeperPicks));
   const groups = POSITIONS.map((p) => ({ pos: p, list: picked.filter((c) => c.pos === p) })).filter(
     (g) => g.list.length > 0
   );
+
+  // The biggest bargains on the whole keeper sheet, regardless of owner — these
+  // are the players most likely to be kept, so they're the ones to plan around.
+  const bestValue = KEEPER_CANDIDATES.map((c) => {
+    const market = marketByUid.get(c.uid) ?? null;
+    return { ...c, market, ev: market != null ? market - c.cost : null };
+  })
+    .filter((c): c is typeof c & { ev: number } => c.ev != null)
+    .sort((a, b) => b.ev - a.ev)
+    .slice(0, 8);
 
   return (
     <div style={{ ...styles.playerCard, marginBottom: 6 }}>
@@ -76,6 +94,76 @@ function CheckedKeepers({ keeperPicks }: { keeperPicks: Record<string, boolean> 
           ))}
         </div>
       )}
+
+      <div style={{ borderTop: "1px solid #2A2F38", marginTop: 10, paddingTop: 8 }}>
+        <div style={{ fontSize: 11, color: "#8B92A0", marginBottom: 2, fontWeight: 600, letterSpacing: 0.4 }}>
+          TOP 8 KEEPER VALUES <span style={{ color: "#5B6270", fontWeight: 400 }}>· league-wide</span>
+        </div>
+        <div style={{ fontSize: 11, color: "#5B6270", marginBottom: 6 }}>
+          Biggest market − keeper cost gaps on the whole sheet. These are the likeliest keeps, so expect them off the
+          board. Tap one to check it.
+        </div>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+          <thead>
+            <tr style={{ color: "#5B6270", fontSize: 10, textAlign: "right" }}>
+              <th style={{ width: 22 }}></th>
+              <th style={{ fontWeight: 500, textAlign: "left", paddingBottom: 3 }}>Player</th>
+              <th style={{ fontWeight: 500, textAlign: "left", paddingBottom: 3, paddingLeft: 6 }}>Owner</th>
+              <th style={{ fontWeight: 500, paddingBottom: 3 }}>Cost</th>
+              <th style={{ fontWeight: 500, paddingBottom: 3 }}>Market</th>
+              <th style={{ fontWeight: 500, paddingBottom: 3, paddingLeft: 8 }}>Value</th>
+            </tr>
+          </thead>
+          <tbody>
+            {bestValue.map((c) => {
+              const checked = isExpectedKeeper(c.uid, keeperPicks);
+              return (
+                <tr
+                  key={c.uid}
+                  onClick={() => onToggleKeeper(c.uid, !checked)}
+                  style={{ cursor: "pointer", background: checked ? "rgba(232, 163, 61, 0.16)" : "transparent" }}
+                >
+                  <td style={{ textAlign: "center", padding: "3px 0" }}>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={(e) => onToggleKeeper(c.uid, e.target.checked)}
+                      onClick={(e) => e.stopPropagation()}
+                      style={{ cursor: "pointer", accentColor: "#E8A33D" }}
+                    />
+                  </td>
+                  <td style={{ textAlign: "left", padding: "3px 4px", color: "#EDEEF0" }}>
+                    {c.player}{" "}
+                    <span style={{ color: (POS_COLOR as Record<string, string>)[c.pos] ?? "#8B92A0", fontSize: 10 }}>
+                      {c.pos}
+                    </span>
+                  </td>
+                  <td style={{ textAlign: "left", paddingLeft: 6, color: "#8B92A0", fontSize: 11 }}>
+                    {c.owner === "Sean" ? "you" : c.owner}
+                  </td>
+                  <td style={{ textAlign: "right", fontFamily: "'IBM Plex Mono', monospace", color: "#C6CAD2" }}>
+                    ${c.cost}
+                  </td>
+                  <td style={{ textAlign: "right", fontFamily: "'IBM Plex Mono', monospace", color: "#C6CAD2" }}>
+                    ${c.market}
+                  </td>
+                  <td
+                    style={{
+                      textAlign: "right",
+                      paddingLeft: 8,
+                      fontFamily: "'IBM Plex Mono', monospace",
+                      fontWeight: 600,
+                      color: c.ev >= 0 ? "#4CAF6B" : "#E1524B",
+                    }}
+                  >
+                    {c.ev >= 0 ? "+" : "−"}${Math.abs(c.ev)}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
