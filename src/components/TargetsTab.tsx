@@ -252,9 +252,10 @@ export function TargetsTab({
   const assignedByFlier = useMemo(() => {
     const m: Record<string, { ones: BoardRowType[]; twos: BoardRowType[] }> = {};
     const byRank = (a: BoardRowType, b: BoardRowType) => (a.effRank ?? Infinity) - (b.effRank ?? Infinity);
+    const isLiked = (r: BoardRowType) => r.interest === "love" || r.interest === "like";
     const preferLiked = (pool: BoardRowType[]) => [
-      ...pool.filter((r) => r.interest === "love" || r.interest === "like").sort(byRank),
-      ...pool.filter((r) => r.interest !== "love" && r.interest !== "like").sort(byRank),
+      ...pool.filter(isLiked).sort(byRank),
+      ...pool.filter((r) => !isLiked(r)).sort(byRank),
     ];
 
     for (const f of fliers) {
@@ -263,14 +264,22 @@ export function TargetsTab({
       const taken = new Set(pinned.map((r) => r.id));
       const free = avail.filter((r) => !taken.has(r.id));
 
-      let ones = free.filter((r) => (r.target as number) <= 1);
+      const atOne = free.filter((r) => (r.target as number) <= 1);
       const twos = free.filter((r) => (r.target as number) === 2);
       // Nothing is down to $1 yet — fall back to the cheapest on the board so the
       // page is never empty.
-      if (ones.length === 0) ones = free.slice(-FLIER_ONES);
+      const onePool = atOne.length > 0 ? atOne : free.slice(-FLIER_ONES);
+
+      // Every $1 player you've Loved or Liked makes this list, however many that
+      // is — the shortlist scrolls rather than dropping any of them. The floor of
+      // FLIER_ONES only pads with the best unrated names when you've liked fewer
+      // than that.
+      const liked = onePool.filter(isLiked).sort(byRank);
+      const unrated = onePool.filter((r) => !isLiked(r)).sort(byRank);
+      const keep = Math.max(FLIER_ONES, pinned.length + liked.length);
 
       m[f.id] = {
-        ones: [...pinned, ...preferLiked(ones)].slice(0, FLIER_ONES),
+        ones: [...pinned, ...liked, ...unrated].slice(0, keep),
         twos: preferLiked(twos).slice(0, FLIER_TWOS),
       };
     }
@@ -760,10 +769,14 @@ function sectionRec(pos: Pos, plan: number, marketRead: MarketRead) {
   return { text: `on plan (market ${fmtPct(r - 1)})`, tone: "neutral" as const };
 }
 
+// Minimum depth for the $1 list; every Loved/Liked $1 player is shown on top of
+// this, so the list can run well past it. FLIER_MAX_H then makes it scroll in
+// place instead of pushing the rest of the card off-screen.
 const FLIER_ONES = 10;
 const FLIER_TWOS = 5;
+const FLIER_MAX_H = "62vh";
 const FLIER_GROUPS: { key: "ones" | "twos"; label: string; note: string; color: string }[] = [
-  { key: "ones", label: "$1 DARTS", note: "min bid — take as many as you have slots for", color: BAND_COLOR.target },
+  { key: "ones", label: "$1 DARTS", note: "min bid — every one you like, then best available", color: BAND_COLOR.target },
   { key: "twos", label: "$2", note: "one dollar more, if the room lets a name slide", color: BAND_COLOR.settle },
 ];
 
@@ -901,7 +914,7 @@ function FlierBlock({
           <div key={f.id}>
             <div style={{ marginBottom: 4 }}>{slotEditor(f)}</div>
             {(assignedByFlier[f.id]?.ones.length ?? 0) + (assignedByFlier[f.id]?.twos.length ?? 0) > 0 && (
-              <div style={styles.tableWrap}>
+              <div style={{ ...styles.tableWrap, maxHeight: FLIER_MAX_H, overflowY: "auto" }}>
                 <table style={styles.table}>
                   <tbody>
                     {FLIER_GROUPS.flatMap(({ key, label, note, color }) => {
@@ -912,7 +925,7 @@ function FlierBlock({
                           <td colSpan={7} style={{ padding: 0, background: "#141821", borderBottom: "1px solid #20242C" }}>
                             <div style={{ position: "sticky", left: 0, display: "inline-block", padding: "4px 8px", whiteSpace: "nowrap" }}>
                               <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.6, color }}>{label}</span>{" "}
-                              <span style={{ fontSize: 10, color: "#5B6270" }}>· {note}</span>
+                              <span style={{ fontSize: 10, color: "#5B6270" }}>· {rows.length} · {note}</span>
                             </div>
                           </td>
                         </tr>,
