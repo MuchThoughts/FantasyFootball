@@ -58,8 +58,8 @@ interface BoardRowProps {
   // Press-and-hold opens the assign/dislike menu; the parent renders it anchored
   // to the returned rect. When absent, hold falls back to toggling Dislike.
   onOpenMenu?: (row: BoardRowType, rect: { top: number; bottom: number; left: number }) => void;
-  // When given, show a notes icon beside the name that opens the note editor.
-  onOpenNote?: (row: BoardRowType, rect: { top: number; bottom: number; left: number }) => void;
+  // Existing note text; shown as a marker beside the name (editing happens in
+  // the press-and-hold menu).
   note?: string;
   // The slot this player is pinned to (position-ordinal label), shown as a tag.
   assignedLabel?: string | null;
@@ -87,7 +87,6 @@ export function BoardRow({
   finish2025,
   pts2025,
   onOpenMenu,
-  onOpenNote,
   note,
   assignedLabel,
   onPaid,
@@ -95,7 +94,6 @@ export function BoardRow({
   onRate,
 }: BoardRowProps) {
   const nameRef = useRef<HTMLDivElement>(null);
-  const noteRef = useRef<HTMLButtonElement>(null);
   const hasNote = !!note && note.trim().length > 0;
   const onHold = onOpenMenu
     ? () => {
@@ -202,30 +200,18 @@ export function BoardRow({
           // tight to the name no matter how long the ADP line below runs. It
           // stops click/pointerdown propagation, so tapping it opens the note
           // editor without also rating the player.
-          const noteBtn = onOpenNote && (
-            <button
-              ref={noteRef}
-              onClick={(e) => {
-                e.stopPropagation();
-                const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                onOpenNote(row, { top: r.top, bottom: r.bottom, left: r.left });
-              }}
-              onPointerDown={(e) => e.stopPropagation()}
-              title={hasNote ? `Note: ${note}` : "Add a note"}
-              style={{
-                flexShrink: 0,
-                background: "transparent",
-                border: "none",
-                cursor: "pointer",
-                padding: "1px 2px",
-                fontSize: 12,
-                lineHeight: 1,
-                color: hasNote ? "#5B9BD5" : "#3A3F4A",
-              }}
+          // Notes open from the press-and-hold menu, not a tap target here — a
+          // 12px icon beside the name was too easy to hit by accident. This is
+          // just a marker that a note exists, and it ignores pointer events so
+          // it can't swallow a tap meant for the name.
+          const noteMark = hasNote ? (
+            <span
+              title={`Note: ${note}`}
+              style={{ flexShrink: 0, color: "#5B9BD5", fontSize: 11, lineHeight: 1, pointerEvents: "none" }}
             >
-              {hasNote ? "▤" : "▢"}
-            </button>
-          );
+              ▤
+            </span>
+          ) : null;
           const content = (
             <>
               <div style={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0 }}>
@@ -233,7 +219,7 @@ export function BoardRow({
                   {row.name}
                   {row.team && <span style={{ color: "#7A828F", fontWeight: 400, fontSize: "0.88em" }}> {row.team}</span>}
                 </div>
-                {noteBtn}
+                {noteMark}
               </div>
               <div style={styles.tdPlayerMeta}>
                 ADP {row.adp}

@@ -879,13 +879,11 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
                               pos: r.pos,
                               disliked: r.interest === "dislike",
                               assignedSlotId: assignments[r.id] ?? null,
+                              hasNote: !!(d.notes ?? {})[r.id]?.trim(),
                               rect,
                             })
                           }
                           note={(d.notes ?? {})[row.id]}
-                          onOpenNote={(r, rect) =>
-                            setNoteEditor({ playerId: r.id, playerName: r.name, pos: r.pos, rect })
-                          }
                           isTarget={strategyTargets.targetIds.has(row.id)}
                           dragEnabled={boardDragEnabled}
                           dragging={boardDrag?.id === row.id}
@@ -968,6 +966,17 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
           }}
           onAssign={(slotId) => {
             setAssignment(slotMenu.playerId, slotId);
+            setSlotMenu(null);
+          }}
+          onNote={() => {
+            // Hand the editor the same anchor the menu used, so it opens over
+            // the player you held rather than jumping elsewhere.
+            setNoteEditor({
+              playerId: slotMenu.playerId,
+              playerName: slotMenu.playerName,
+              pos: slotMenu.pos,
+              rect: slotMenu.rect,
+            });
             setSlotMenu(null);
           }}
           onClose={() => setSlotMenu(null)}

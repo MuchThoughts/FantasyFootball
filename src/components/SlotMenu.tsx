@@ -10,6 +10,7 @@ export interface SlotMenuState {
   pos: string;
   disliked: boolean;
   assignedSlotId: string | null;
+  hasNote?: boolean;
   rect: { top: number; bottom: number; left: number };
 }
 
@@ -19,12 +20,13 @@ interface SlotMenuProps {
   slots: SlotLabel[];
   onDislike: () => void;
   onAssign: (slotId: string | null) => void;
+  onNote?: () => void;
   onClose: () => void;
 }
 
 // Press-and-hold popup: dislike the player, or pin him to one of your draft
 // slots so he leads that slot's Targets list. Anchored to the tapped name.
-export function SlotMenu({ menu, slots, onDislike, onAssign, onClose }: SlotMenuProps) {
+export function SlotMenu({ menu, slots, onDislike, onAssign, onNote, onClose }: SlotMenuProps) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
@@ -65,10 +67,18 @@ export function SlotMenu({ menu, slots, onDislike, onAssign, onClose }: SlotMenu
         <div style={{ padding: "8px 10px", borderBottom: "1px solid #2A2F38" }}>
           <div style={{ fontSize: 12.5, fontWeight: 600, color: "#EDEEF0" }}>{menu.playerName}</div>
           <div style={{ fontSize: 10, color: "#8B92A0" }}>
-            <span style={{ color: POS_COLOR[menu.pos as keyof typeof POS_COLOR] ?? "#8B92A0" }}>{menu.pos}</span> · assign
-            to a slot
+            <span style={{ color: POS_COLOR[menu.pos as keyof typeof POS_COLOR] ?? "#8B92A0" }}>{menu.pos}</span> · notes,
+            dislike, or assign to a slot
           </div>
         </div>
+
+        {onNote && (
+          <button style={menuItem(false)} onClick={onNote}>
+            <span style={{ color: menu.hasNote ? "#5B9BD5" : "#C6CAD2" }}>
+              {menu.hasNote ? "▤ Edit note" : "▢ Add note"}
+            </span>
+          </button>
+        )}
 
         <button style={menuItem(false)} onClick={onDislike}>
           <span style={{ color: menu.disliked ? "#8FCB9E" : "#E1524B" }}>
