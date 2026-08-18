@@ -7,7 +7,6 @@ import {
   availableByPos,
   Band,
   BAND_COLOR,
-  BAND_SIZE,
   BAND_HI,
   bandsAt,
   Board,
@@ -243,27 +242,37 @@ export function TargetsTab({
     return out;
   }, [openSlots, availByPos, assignments]);
 
-  // $1 endgame slots. Each gets a shortlist: anyone you've pinned to it first,
-  // then players you've Loved/Liked who are actually gettable at this price,
-  // then the highest-ranked players left in that price range.
+  // $1 endgame slots. These skip Reach/Target/Settle — those windows all collapse
+  // onto the same names at the minimum bid — and get a deep two-group shortlist
+  // instead: the $1 darts you can actually have, plus a few $2 names worth one
+  // extra dollar. Anyone pinned to the slot leads, then Loved/Liked, then the
+  // highest-ranked remaining.
   const fliers = useMemo(() => openSlots.filter((s) => s.amount < 2), [openSlots]);
+
   const assignedByFlier = useMemo(() => {
-    const m: Record<string, BoardRowType[]> = {};
+    const m: Record<string, { ones: BoardRowType[]; twos: BoardRowType[] }> = {};
+    const byRank = (a: BoardRowType, b: BoardRowType) => (a.effRank ?? Infinity) - (b.effRank ?? Infinity);
+    const preferLiked = (pool: BoardRowType[]) => [
+      ...pool.filter((r) => r.interest === "love" || r.interest === "like").sort(byRank),
+      ...pool.filter((r) => r.interest !== "love" && r.interest !== "like").sort(byRank),
+    ];
+
     for (const f of fliers) {
       const avail = availByPos[f.pos] ?? []; // price desc
       const pinned = avail.filter((r) => assignments[r.id] === f.id);
       const taken = new Set(pinned.map((r) => r.id));
+      const free = avail.filter((r) => !taken.has(r.id));
 
-      const cap = Math.max(f.amount + 1, 2);
-      const inRange = avail.filter((r) => !taken.has(r.id) && (r.target as number) <= cap);
-      // Nothing that cheap on the board yet — fall back to the cheapest players.
-      const pool = inRange.length > 0 ? inRange : avail.filter((r) => !taken.has(r.id)).slice(-BAND_SIZE);
+      let ones = free.filter((r) => (r.target as number) <= 1);
+      const twos = free.filter((r) => (r.target as number) === 2);
+      // Nothing is down to $1 yet — fall back to the cheapest on the board so the
+      // page is never empty.
+      if (ones.length === 0) ones = free.slice(-FLIER_ONES);
 
-      const byRank = (a: BoardRowType, b: BoardRowType) => (a.effRank ?? Infinity) - (b.effRank ?? Infinity);
-      const liked = pool.filter((r) => r.interest === "love" || r.interest === "like").sort(byRank);
-      const rest = pool.filter((r) => r.interest !== "love" && r.interest !== "like").sort(byRank);
-
-      m[f.id] = [...pinned, ...liked, ...rest].slice(0, BAND_SIZE);
+      m[f.id] = {
+        ones: [...pinned, ...preferLiked(ones)].slice(0, FLIER_ONES),
+        twos: preferLiked(twos).slice(0, FLIER_TWOS),
+      };
     }
     return m;
   }, [fliers, availByPos, assignments]);
@@ -751,6 +760,13 @@ function sectionRec(pos: Pos, plan: number, marketRead: MarketRead) {
   return { text: `on plan (market ${fmtPct(r - 1)})`, tone: "neutral" as const };
 }
 
+const FLIER_ONES = 10;
+const FLIER_TWOS = 5;
+const FLIER_GROUPS: { key: "ones" | "twos"; label: string; note: string; color: string }[] = [
+  { key: "ones", label: "$1 DARTS", note: "min bid — take as many as you have slots for", color: BAND_COLOR.target },
+  { key: "twos", label: "$2", note: "one dollar more, if the room lets a name slide", color: BAND_COLOR.settle },
+];
+
 const REC_COLOR = { hot: "#E1524B", cheap: "#4CAF6B", neutral: "#8B92A0" } as const;
 
 const GROUP_META: { key: Band; label: string; color: string; note: string }[] = [
@@ -864,7 +880,7 @@ function FlierBlock({
   onRate,
 }: {
   slots: OpenSlot[];
-  assignedByFlier: Record<string, BoardRowType[]>;
+  assignedByFlier: Record<string, { ones: BoardRowType[]; twos: BoardRowType[] }>;
   slotEditor: (sl: OpenSlot) => React.ReactNode;
   assignedLabelFor: (id: string) => string | null;
   onOpenMenu: (row: BoardRowType, rect: SlotMenuState["rect"]) => void;
@@ -877,38 +893,52 @@ function FlierBlock({
       <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: 0.4, color: "#8B92A0", marginBottom: 6 }}>
         {slots.map((s) => s.label).join(" + ")}{" "}
         <span style={{ color: "#5B6270", fontWeight: 400 }}>
-          · your Loved/Liked darts at this price first, then the best left in range
+          · endgame board — Loved/Liked first, then best available
         </span>
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {slots.map((f) => (
           <div key={f.id}>
-            <div style={{ marginBottom: assignedByFlier[f.id]?.length ? 4 : 0 }}>{slotEditor(f)}</div>
-            {assignedByFlier[f.id]?.length > 0 && (
+            <div style={{ marginBottom: 4 }}>{slotEditor(f)}</div>
+            {(assignedByFlier[f.id]?.ones.length ?? 0) + (assignedByFlier[f.id]?.twos.length ?? 0) > 0 && (
               <div style={styles.tableWrap}>
                 <table style={styles.table}>
                   <tbody>
-                    {assignedByFlier[f.id].map((row) => (
-                      <BoardRow
-                        key={row.id}
-                        row={row}
-                        tierBreak={false}
-                        isTarget={false}
-                        dragEnabled={false}
-                        dragging={false}
-                        dropEdge={{}}
-                        onDragStart={noop}
-                        playerStickyLeft={38}
-                        showPos={false}
-                        showPaid={false}
-                        actCost={rawCostAt(row.pos, row.effRank)}
-                        assignedLabel={assignedLabelFor(row.id)}
-                        onOpenMenu={onOpenMenu}
-                        onPaid={noop}
-                        onMeta={onMeta}
-                        onRate={onRate}
-                      />
-                    ))}
+                    {FLIER_GROUPS.flatMap(({ key, label, note, color }) => {
+                      const rows = assignedByFlier[f.id]?.[key] ?? [];
+                      if (rows.length === 0) return [];
+                      return [
+                        <tr key={key}>
+                          <td colSpan={7} style={{ padding: 0, background: "#141821", borderBottom: "1px solid #20242C" }}>
+                            <div style={{ position: "sticky", left: 0, display: "inline-block", padding: "4px 8px", whiteSpace: "nowrap" }}>
+                              <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.6, color }}>{label}</span>{" "}
+                              <span style={{ fontSize: 10, color: "#5B6270" }}>· {note}</span>
+                            </div>
+                          </td>
+                        </tr>,
+                        ...rows.map((row) => (
+                          <BoardRow
+                            key={row.id}
+                            row={row}
+                            tierBreak={false}
+                            isTarget={false}
+                            dragEnabled={false}
+                            dragging={false}
+                            dropEdge={{}}
+                            onDragStart={noop}
+                            playerStickyLeft={38}
+                            showPos={false}
+                            showPaid={false}
+                            actCost={rawCostAt(row.pos, row.effRank)}
+                            assignedLabel={assignedLabelFor(row.id)}
+                            onOpenMenu={onOpenMenu}
+                            onPaid={noop}
+                            onMeta={onMeta}
+                            onRate={onRate}
+                          />
+                        )),
+                      ];
+                    })}
                   </tbody>
                 </table>
               </div>
