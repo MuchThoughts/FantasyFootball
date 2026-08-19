@@ -551,6 +551,7 @@ export function computeStrategyZones(rows: BoardRow[], strategy: Strategy | unde
  * with the band they land in. Both read this one definition.
  */
 export type Band = "reach" | "target" | "settle";
+export const BANDS: Band[] = ["reach", "target", "settle"];
 
 export const BAND_HI = 1.15; // where "your money buys him" starts (× slot price)
 export const BAND_SIZE = 5;
@@ -561,13 +562,26 @@ export const BAND_COLOR: Record<Band, string> = {
   settle: "#E8A33D",
 };
 
-// Players still gettable at each position, priced high -> low.
+// Loved players sort ahead of Liked, which sort ahead of everyone unrated.
+const interestRank = (r: BoardRow) => (r.interest === "love" ? 0 : r.interest === "like" ? 1 : 2);
+
+// Players still gettable at each position, priced high -> low. The bands slice
+// fixed-size windows out of this ladder, so where a price tier is crowded —
+// a dozen WRs all worth $5 — position within the tier decides who makes the
+// window at all. Players you've Loved or Liked lead their own price tier so
+// they surface into the list for a slot at that price instead of being buried
+// behind higher-ranked names you have no opinion on.
 export function availableByPos(rows: BoardRow[]): Record<Pos, BoardRow[]> {
   const m = {} as Record<Pos, BoardRow[]>;
   POSITIONS.forEach((pos) => {
     m[pos] = rows
       .filter((r) => r.pos === pos && r.target != null && !r.isDrafted && !r.isKeeper && r.interest !== "dislike")
-      .sort((a, b) => (b.target as number) - (a.target as number));
+      .sort(
+        (a, b) =>
+          (b.target as number) - (a.target as number) ||
+          interestRank(a) - interestRank(b) ||
+          (a.effRank ?? Infinity) - (b.effRank ?? Infinity)
+      );
   });
   return m;
 }
@@ -576,11 +590,42 @@ export function availableByPos(rows: BoardRow[]): Record<Pos, BoardRow[]> {
 export function bandsAt(avail: BoardRow[], price: number): Record<Band, BoardRow[]> {
   let start = avail.findIndex((r) => (r.target as number) <= price * BAND_HI);
   if (start === -1) start = avail.length;
-  return {
+  const bands: Record<Band, BoardRow[]> = {
     reach: avail.slice(Math.max(0, start - BAND_SIZE), start),
     target: avail.slice(start, start + BAND_SIZE),
     settle: avail.slice(start + BAND_SIZE, start + 2 * BAND_SIZE),
   };
+
+  // Fixed-size windows cut through crowded price tiers, so a player you've
+  // Loved or Liked can be dropped while unrated players at the very same price
+  // are shown. Pull him back in: anyone rated whose price already sits inside a
+  // band's price span joins that band, which is the only way these lists grow.
+  // A rated player priced outside every span is a different bid entirely and
+  // stays out.
+  const claimed = new Set<string>();
+  BANDS.forEach((band) => bands[band].forEach((r) => claimed.add(r.id)));
+  const ladderPos = new Map(avail.map((r, i) => [r.id, i]));
+
+  BANDS.forEach((band) => {
+    const win = bands[band];
+    if (win.length === 0) return;
+    const hi = win[0].target as number;
+    const lo = win[win.length - 1].target as number;
+    const pulled = avail.filter(
+      (r) =>
+        !claimed.has(r.id) &&
+        interestRank(r) < 2 &&
+        (r.target as number) <= hi &&
+        (r.target as number) >= lo
+    );
+    if (pulled.length === 0) return;
+    pulled.forEach((r) => claimed.add(r.id));
+    // Back into ladder order, which already puts rated players first within
+    // their own price.
+    bands[band] = [...win, ...pulled].sort((a, b) => (ladderPos.get(a.id) ?? 0) - (ladderPos.get(b.id) ?? 0));
+  });
+
+  return bands;
 }
 
 // Which band each player falls in for the active strategy, considering every
