@@ -344,14 +344,17 @@ export function TargetsTab({
   if (!strategy) return <div style={styles.emptyState}>No active strategy.</div>;
 
   const slotEditor = (sl: OpenSlot) => (
-    <SlotEditor
+    <SlotEditor key={sl.id} slot={sl} strategyId={strategy.id} onSlotPos={onSlotPos} onSlotAmount={onSlotAmount} />
+  );
+
+  // Rendered as its own full-width row under the controls, so it lands in the
+  // same spot on every pick's page.
+  const slotNote = (sl: OpenSlot) => (
+    <SlotNoteRow
       key={sl.id}
-      slot={sl}
-      strategyId={strategy.id}
-      note={strategy.slotNotes?.[sl.id] ?? ""}
-      onSlotPos={onSlotPos}
-      onSlotAmount={onSlotAmount}
-      onSlotNote={onSlotNote}
+      label={sl.label}
+      value={strategy.slotNotes?.[sl.id] ?? ""}
+      onCommit={(v) => onSlotNote(strategy.id, sl.id, v)}
     />
   );
 
@@ -451,6 +454,7 @@ export function TargetsTab({
                 cluster={c}
                 marketRead={marketRead}
                 slotEditor={slotEditor}
+                slotNote={slotNote}
                 assignedLabelFor={assignedLabelFor}
                 onOpenMenu={openMenu}
                 onMeta={onMeta}
@@ -466,6 +470,7 @@ export function TargetsTab({
                 slots={group}
                 assignedByFlier={assignedByFlier}
                 slotEditor={slotEditor}
+                slotNote={slotNote}
                 assignedLabelFor={assignedLabelFor}
                 onOpenMenu={openMenu}
                 onMeta={onMeta}
@@ -654,75 +659,69 @@ function StatusBar({
 function SlotEditor({
   slot,
   strategyId,
-  note,
   onSlotPos,
   onSlotAmount,
-  onSlotNote,
 }: {
   slot: OpenSlot;
   strategyId: string;
-  note: string;
   onSlotPos: (strategyId: string, slotId: string, pos: string) => void;
   onSlotAmount: (strategyId: string, slotId: string, value: string) => void;
-  onSlotNote: (strategyId: string, slotId: string, text: string) => void;
 }) {
   const options: Pos[] = slot.id.startsWith("flex") ? (["RB", "WR", "TE"] as Pos[]) : POSITIONS;
   return (
     <div
       style={{
         display: "inline-flex",
-        flexDirection: "column",
-        alignItems: "stretch",
-        gap: 2,
+        alignItems: "center",
+        gap: 5,
         background: "#1C2128",
         border: "1px solid #2A2F38",
         borderRadius: 6,
         padding: "3px 6px",
-        minWidth: 190,
       }}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-        <span style={{ fontSize: 11, fontWeight: 600, color: "#C6CAD2" }}>{slot.label}</span>
-        {slot.fixed ? (
-          <span style={{ ...styles.posTagSm, background: POS_COLOR[slot.pos] }}>{slot.pos}</span>
-        ) : (
-          <select
-            style={{ ...styles.statusSelect, width: 52 }}
-            value={slot.pos}
-            onChange={(e) => onSlotPos(strategyId, slot.id, e.target.value)}
-          >
-            {options.map((p) => (
-              <option key={p} value={p} style={{ background: "#1C2128", color: "#EDEEF0" }}>
-                {p}
-              </option>
-            ))}
-          </select>
-        )}
-        <span style={{ fontSize: 11, color: "#5B6270" }}>$</span>
-        <PriceInput value={slot.amount} onCommit={(v) => onSlotAmount(strategyId, slot.id, v)} />
-      </div>
-      <SlotNote label={slot.label} value={note} onCommit={(v) => onSlotNote(strategyId, slot.id, v)} />
+      <span style={{ fontSize: 11, fontWeight: 600, color: "#C6CAD2" }}>{slot.label}</span>
+      {slot.fixed ? (
+        <span style={{ ...styles.posTagSm, background: POS_COLOR[slot.pos] }}>{slot.pos}</span>
+      ) : (
+        <select
+          style={{ ...styles.statusSelect, width: 52 }}
+          value={slot.pos}
+          onChange={(e) => onSlotPos(strategyId, slot.id, e.target.value)}
+        >
+          {options.map((p) => (
+            <option key={p} value={p} style={{ background: "#1C2128", color: "#EDEEF0" }}>
+              {p}
+            </option>
+          ))}
+        </select>
+      )}
+      <span style={{ fontSize: 11, color: "#5B6270" }}>$</span>
+      <PriceInput value={slot.amount} onCommit={(v) => onSlotAmount(strategyId, slot.id, v)} />
     </div>
   );
 }
 
-// Your own reminder about one pick, sitting under its price. Held locally while
-// you type so a keystroke doesn't rebuild the board, then written on blur,
-// Enter, or when the card page swipes this input away.
-function SlotNote({ label, value, onCommit }: { label: string; value: string; onCommit: (v: string) => void }) {
+// Your own reminder about one pick. Collapsed it's a single row under the slot
+// controls, in the same place on every pick's page so it doesn't move around as
+// you swipe across them; tapping it opens a proper editor.
+//
+// Text is held locally while you type, because committing a keystroke would
+// rebuild the whole board. It's written on Done, on blur, and on unmount —
+// swiping to another page tears this down without firing blur, so that last one
+// is what keeps what you just typed.
+function SlotNoteRow({ label, value, onCommit }: { label: string; value: string; onCommit: (v: string) => void }) {
+  const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(value);
-  const [editing, setEditing] = useState(false);
   const [synced, setSynced] = useState(value);
 
-  // Adopt outside edits (another device, a strategy switch) only while idle, so
-  // a sync landing mid-sentence can't overwrite what you're typing.
-  if (!editing && value !== synced) {
+  // Adopt outside edits (another device, a strategy switch) only while closed,
+  // so a sync landing mid-sentence can't overwrite what you're typing.
+  if (!open && value !== synced) {
     setSynced(value);
     setDraft(value);
   }
 
-  // Swiping to another page unmounts this without firing blur, so park the
-  // pending text somewhere the unmount cleanup can still reach it.
   const pending = useRef({ draft, value, onCommit });
   useEffect(() => {
     pending.current = { draft, value, onCommit };
@@ -736,40 +735,101 @@ function SlotNote({ label, value, onCommit }: { label: string; value: string; on
   );
 
   const commit = () => {
-    setEditing(false);
+    setOpen(false);
     if (draft !== value) onCommit(draft);
   };
 
+  const shell: React.CSSProperties = {
+    background: "#161A21",
+    border: "1px solid #2A2F38",
+    borderRadius: 6,
+    padding: "3px 7px",
+    marginBottom: 6,
+  };
+  const tag: React.CSSProperties = {
+    flexShrink: 0,
+    fontSize: 9.5,
+    fontWeight: 700,
+    letterSpacing: 0.4,
+    color: "#5B6270",
+  };
+
+  if (!open) {
+    return (
+      <div
+        role="button"
+        tabIndex={0}
+        title={value ? `${label} note: ${value}` : `Add a note for ${label}`}
+        onClick={() => setOpen(true)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") setOpen(true);
+        }}
+        style={{ ...shell, display: "flex", alignItems: "center", gap: 6, cursor: "text", minHeight: 20 }}
+      >
+        <span style={tag}>{label}</span>
+        <span
+          style={{
+            flex: 1,
+            minWidth: 0,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            fontSize: 10.5,
+            lineHeight: 1.4,
+            color: value ? "#A7ADBA" : "#4A5160",
+            fontStyle: value ? "normal" : "italic",
+          }}
+        >
+          {value || "note to self…"}
+        </span>
+        <span style={{ flexShrink: 0, fontSize: 10, color: "#3A3F4A" }}>{value ? "✎" : "+"}</span>
+      </div>
+    );
+  }
+
   return (
-    <input
-      value={draft}
-      placeholder="note to self…"
-      title={`Your note for ${label}`}
-      onChange={(e) => setDraft(e.target.value)}
-      onFocus={() => setEditing(true)}
-      onBlur={commit}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-        else if (e.key === "Escape") {
-          setDraft(value);
-          setEditing(false);
-          (e.target as HTMLInputElement).blur();
-        }
-      }}
-      style={{
-        width: "100%",
-        boxSizing: "border-box",
-        background: "transparent",
-        border: "none",
-        borderBottom: `1px solid ${editing ? "#3A3F4A" : "transparent"}`,
-        outline: "none",
-        padding: "1px 0",
-        fontSize: 10.5,
-        lineHeight: 1.3,
-        fontFamily: "inherit",
-        color: draft ? "#A7ADBA" : "#5B6270",
-      }}
-    />
+    // Swallow the pointer so dragging to select text inside the note doesn't
+    // page the card underneath it.
+    <div style={shell} onPointerDown={(e) => e.stopPropagation()}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
+        <span style={tag}>{label}</span>
+        <span style={{ flex: 1, fontSize: 9.5, color: "#3A3F4A" }}>esc to cancel</span>
+        <button
+          style={{ ...styles.smallBtn, padding: "1px 8px", fontSize: 10 }}
+          // Commit before the textarea's blur can close us out from under the click.
+          onPointerDown={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            commit();
+          }}
+        >
+          Done
+        </button>
+      </div>
+      <textarea
+        autoFocus
+        value={draft}
+        placeholder={`Note to self about ${label}…`}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") {
+            setDraft(value);
+            setOpen(false);
+          }
+        }}
+        style={{
+          ...styles.input,
+          width: "100%",
+          boxSizing: "border-box",
+          minHeight: 52,
+          resize: "vertical",
+          fontSize: 11.5,
+          lineHeight: 1.45,
+          padding: "4px 6px",
+        }}
+      />
+    </div>
   );
 }
 
@@ -879,6 +939,7 @@ function ClusterBlock({
   cluster,
   marketRead,
   slotEditor,
+  slotNote,
   assignedLabelFor,
   onOpenMenu,
   onMeta,
@@ -887,6 +948,7 @@ function ClusterBlock({
   cluster: Cluster;
   marketRead: MarketRead;
   slotEditor: (sl: OpenSlot) => React.ReactNode;
+  slotNote: (sl: OpenSlot) => React.ReactNode;
   assignedLabelFor: (id: string) => string | null;
   onOpenMenu: (row: BoardRowType, rect: SlotMenuState["rect"]) => void;
   onMeta: (id: string, field: "max", value: string) => void;
@@ -909,6 +971,8 @@ function ClusterBlock({
           </div>
         </div>
       </div>
+
+      {cluster.slots.map(slotNote)}
 
       <div style={styles.tableWrap}>
         <table style={styles.table}>
@@ -976,6 +1040,7 @@ function FlierBlock({
   slots,
   assignedByFlier,
   slotEditor,
+  slotNote,
   assignedLabelFor,
   onOpenMenu,
   onMeta,
@@ -984,6 +1049,7 @@ function FlierBlock({
   slots: OpenSlot[];
   assignedByFlier: Record<string, { ones: BoardRowType[]; twos: BoardRowType[] }>;
   slotEditor: (sl: OpenSlot) => React.ReactNode;
+  slotNote: (sl: OpenSlot) => React.ReactNode;
   assignedLabelFor: (id: string) => string | null;
   onOpenMenu: (row: BoardRowType, rect: SlotMenuState["rect"]) => void;
   onMeta: (id: string, field: "max", value: string) => void;
@@ -1002,6 +1068,7 @@ function FlierBlock({
         {slots.map((f) => (
           <div key={f.id}>
             <div style={{ marginBottom: 4 }}>{slotEditor(f)}</div>
+            {slotNote(f)}
             {(assignedByFlier[f.id]?.ones.length ?? 0) + (assignedByFlier[f.id]?.twos.length ?? 0) > 0 && (
               <div style={{ ...styles.tableWrap, maxHeight: FLIER_MAX_H, overflowY: "auto" }}>
                 <table style={styles.table}>
