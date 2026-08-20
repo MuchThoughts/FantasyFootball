@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Strategy } from "@/lib/data/strategies";
 import {
   assignKeepersToSlots,
@@ -130,6 +130,8 @@ interface TargetsTabProps {
   onDislike: (playerId: string, value: Interest) => void;
   // Editable per-position narrative on each card; null resets to the auto-summary.
   onPositionNote: (strategyId: string, pos: Pos, text: string | null) => void;
+  // Free-text note about one specific pick, shown beside that slot's price.
+  onSlotNote: (strategyId: string, slotId: string, text: string) => void;
 }
 
 export function TargetsTab({
@@ -152,6 +154,7 @@ export function TargetsTab({
   onAssign,
   onDislike,
   onPositionNote,
+  onSlotNote,
 }: TargetsTabProps) {
   const strategy = strategies.find((s) => s.id === activeStrategyId) || strategies[0];
 
@@ -341,7 +344,15 @@ export function TargetsTab({
   if (!strategy) return <div style={styles.emptyState}>No active strategy.</div>;
 
   const slotEditor = (sl: OpenSlot) => (
-    <SlotEditor key={sl.id} slot={sl} strategyId={strategy.id} onSlotPos={onSlotPos} onSlotAmount={onSlotAmount} />
+    <SlotEditor
+      key={sl.id}
+      slot={sl}
+      strategyId={strategy.id}
+      note={strategy.slotNotes?.[sl.id] ?? ""}
+      onSlotPos={onSlotPos}
+      onSlotAmount={onSlotAmount}
+      onSlotNote={onSlotNote}
+    />
   );
 
   return (
@@ -643,46 +654,122 @@ function StatusBar({
 function SlotEditor({
   slot,
   strategyId,
+  note,
   onSlotPos,
   onSlotAmount,
+  onSlotNote,
 }: {
   slot: OpenSlot;
   strategyId: string;
+  note: string;
   onSlotPos: (strategyId: string, slotId: string, pos: string) => void;
   onSlotAmount: (strategyId: string, slotId: string, value: string) => void;
+  onSlotNote: (strategyId: string, slotId: string, text: string) => void;
 }) {
   const options: Pos[] = slot.id.startsWith("flex") ? (["RB", "WR", "TE"] as Pos[]) : POSITIONS;
   return (
     <div
       style={{
         display: "inline-flex",
-        alignItems: "center",
-        gap: 5,
+        flexDirection: "column",
+        alignItems: "stretch",
+        gap: 2,
         background: "#1C2128",
         border: "1px solid #2A2F38",
         borderRadius: 6,
         padding: "3px 6px",
+        minWidth: 190,
       }}
     >
-      <span style={{ fontSize: 11, fontWeight: 600, color: "#C6CAD2" }}>{slot.label}</span>
-      {slot.fixed ? (
-        <span style={{ ...styles.posTagSm, background: POS_COLOR[slot.pos] }}>{slot.pos}</span>
-      ) : (
-        <select
-          style={{ ...styles.statusSelect, width: 52 }}
-          value={slot.pos}
-          onChange={(e) => onSlotPos(strategyId, slot.id, e.target.value)}
-        >
-          {options.map((p) => (
-            <option key={p} value={p} style={{ background: "#1C2128", color: "#EDEEF0" }}>
-              {p}
-            </option>
-          ))}
-        </select>
-      )}
-      <span style={{ fontSize: 11, color: "#5B6270" }}>$</span>
-      <PriceInput value={slot.amount} onCommit={(v) => onSlotAmount(strategyId, slot.id, v)} />
+      <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+        <span style={{ fontSize: 11, fontWeight: 600, color: "#C6CAD2" }}>{slot.label}</span>
+        {slot.fixed ? (
+          <span style={{ ...styles.posTagSm, background: POS_COLOR[slot.pos] }}>{slot.pos}</span>
+        ) : (
+          <select
+            style={{ ...styles.statusSelect, width: 52 }}
+            value={slot.pos}
+            onChange={(e) => onSlotPos(strategyId, slot.id, e.target.value)}
+          >
+            {options.map((p) => (
+              <option key={p} value={p} style={{ background: "#1C2128", color: "#EDEEF0" }}>
+                {p}
+              </option>
+            ))}
+          </select>
+        )}
+        <span style={{ fontSize: 11, color: "#5B6270" }}>$</span>
+        <PriceInput value={slot.amount} onCommit={(v) => onSlotAmount(strategyId, slot.id, v)} />
+      </div>
+      <SlotNote label={slot.label} value={note} onCommit={(v) => onSlotNote(strategyId, slot.id, v)} />
     </div>
+  );
+}
+
+// Your own reminder about one pick, sitting under its price. Held locally while
+// you type so a keystroke doesn't rebuild the board, then written on blur,
+// Enter, or when the card page swipes this input away.
+function SlotNote({ label, value, onCommit }: { label: string; value: string; onCommit: (v: string) => void }) {
+  const [draft, setDraft] = useState(value);
+  const [editing, setEditing] = useState(false);
+  const [synced, setSynced] = useState(value);
+
+  // Adopt outside edits (another device, a strategy switch) only while idle, so
+  // a sync landing mid-sentence can't overwrite what you're typing.
+  if (!editing && value !== synced) {
+    setSynced(value);
+    setDraft(value);
+  }
+
+  // Swiping to another page unmounts this without firing blur, so park the
+  // pending text somewhere the unmount cleanup can still reach it.
+  const pending = useRef({ draft, value, onCommit });
+  useEffect(() => {
+    pending.current = { draft, value, onCommit };
+  });
+  useEffect(
+    () => () => {
+      const p = pending.current;
+      if (p.draft !== p.value) p.onCommit(p.draft);
+    },
+    []
+  );
+
+  const commit = () => {
+    setEditing(false);
+    if (draft !== value) onCommit(draft);
+  };
+
+  return (
+    <input
+      value={draft}
+      placeholder="note to self…"
+      title={`Your note for ${label}`}
+      onChange={(e) => setDraft(e.target.value)}
+      onFocus={() => setEditing(true)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+        else if (e.key === "Escape") {
+          setDraft(value);
+          setEditing(false);
+          (e.target as HTMLInputElement).blur();
+        }
+      }}
+      style={{
+        width: "100%",
+        boxSizing: "border-box",
+        background: "transparent",
+        border: "none",
+        borderBottom: `1px solid ${editing ? "#3A3F4A" : "transparent"}`,
+        outline: "none",
+        padding: "1px 0",
+        fontSize: 10.5,
+        lineHeight: 1.3,
+        fontFamily: "inherit",
+        color: draft ? "#A7ADBA" : "#5B6270",
+      }}
+    />
   );
 }
 

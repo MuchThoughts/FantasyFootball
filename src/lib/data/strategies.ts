@@ -15,6 +15,12 @@ export interface Strategy {
    * when the user has edited it; otherwise a summary is generated from the slots.
    */
   positionNotes?: Partial<Record<StrategySlot["pos"], string>>;
+  /**
+   * Free-text note per draft slot, keyed by slot id — your own reminders about
+   * a specific pick ("only if he falls", "handcuff first"). Shown next to that
+   * slot's price on the Targets tab. Absent when you haven't written one.
+   */
+  slotNotes?: Record<string, string>;
   slots: StrategySlot[];
 }
 

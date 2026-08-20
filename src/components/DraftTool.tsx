@@ -537,6 +537,24 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
     [update]
   );
 
+  // Your own note about one specific pick, shown beside that slot's price on
+  // the Targets tab. Empty text removes it rather than storing a blank.
+  const setSlotNote = useCallback(
+    (strategyId: string, slotId: string, text: string) => {
+      update((prev) => ({
+        ...prev,
+        strategies: prev.strategies.map((s) => {
+          if (s.id !== strategyId) return s;
+          const slotNotes = { ...(s.slotNotes ?? {}) };
+          if (text.trim() === "") delete slotNotes[slotId];
+          else slotNotes[slotId] = text;
+          return { ...s, slotNotes };
+        }),
+      }));
+    },
+    [update]
+  );
+
   const setStrategyName = useCallback(
     (strategyId: string, name: string) => {
       update((prev) => ({ ...prev, strategies: prev.strategies.map((s) => (s.id === strategyId ? { ...s, name } : s)) }));
@@ -944,6 +962,7 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
           onAssign={setAssignment}
           onDislike={setInterestById}
           onPositionNote={setPositionNote}
+          onSlotNote={setSlotNote}
         />
       )}
 
