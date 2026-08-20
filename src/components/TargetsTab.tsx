@@ -63,7 +63,7 @@ interface PlanSlot {
 function describeTier(pos: Pos, amount: number, avail: BoardRowType[]): string | null {
   if (!avail.length || amount <= 0) return null;
   const ranks = [...avail]
-    .sort((a, b) => Math.abs((a.target as number) - amount) - Math.abs((b.target as number) - amount))
+    .sort((a, b) => Math.abs((a.act as number) - amount) - Math.abs((b.act as number) - amount))
     .slice(0, 5)
     .map((r) => r.effRank)
     .filter((r): r is number => r != null);
@@ -225,12 +225,12 @@ export function TargetsTab({
         for (const r of avail) {
           const a = assignments[r.id];
           if (!a || !clusterSlotIds.has(a) || present.has(r.id)) continue;
-          const t = r.target as number;
+          const t = r.act as number;
           if (t > hi * BAND_HI) reach.push(r);
           else if (t < lo * 0.8) settle.push(r);
           else target.push(r);
         }
-        const bySort = (a: BoardRowType, b: BoardRowType) => (b.target as number) - (a.target as number);
+        const bySort = (a: BoardRowType, b: BoardRowType) => (b.act as number) - (a.act as number);
         reach.sort(bySort);
         target.sort(bySort);
         settle.sort(bySort);
@@ -264,8 +264,8 @@ export function TargetsTab({
       const taken = new Set(pinned.map((r) => r.id));
       const free = avail.filter((r) => !taken.has(r.id));
 
-      const atOne = free.filter((r) => (r.target as number) <= 1);
-      const twos = free.filter((r) => (r.target as number) === 2);
+      const atOne = free.filter((r) => (r.act as number) <= 1);
+      const twos = free.filter((r) => (r.act as number) === 2);
       // Nothing is down to $1 yet — fall back to the cheapest on the board so the
       // page is never empty.
       const onePool = atOne.length > 0 ? atOne : free.slice(-FLIER_ONES);
@@ -830,11 +830,9 @@ function ClusterBlock({
               <th style={{ ...styles.th, ...styles.thSticky }}>Rk</th>
               <th style={{ ...styles.th, ...styles.thSticky2, left: 38 }}>{label}</th>
               <th style={styles.th}>Tier</th>
-              <th style={styles.th} title="Actual league draft cost for this rank">
+              <th style={styles.th} title="What this league has actually paid for this rank (2023-25 average)">
                 Act
               </th>
-              <th style={styles.th}>Tgt</th>
-              <th style={styles.th}>Live</th>
               <th style={styles.th}>Max</th>
             </tr>
           </thead>
@@ -844,7 +842,7 @@ function ClusterBlock({
               if (rows.length === 0) return null;
               return [
                 <tr key={g.key}>
-                  <td colSpan={7} style={{ padding: 0, background: "#141821", borderBottom: "1px solid #20242C" }}>
+                  <td colSpan={5} style={{ padding: 0, background: "#141821", borderBottom: "1px solid #20242C" }}>
                     {/* Sticky-left so the band name stays put when scrolling right. */}
                     <div style={{ position: "sticky", left: 0, display: "inline-block", padding: "4px 8px", whiteSpace: "nowrap" }}>
                       <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.6, color: g.color }}>{g.label}</span>{" "}
@@ -864,6 +862,10 @@ function ClusterBlock({
                     onDragStart={noop}
                     playerStickyLeft={38}
                     showPos={false}
+                    // Act is the price these lists are built from; the curve
+                    // target and the live estimate just crowded it out.
+                    showTgt={false}
+                    showLive={false}
                     showPaid={false}
                     actCost={rawCostAt(row.pos, row.effRank)}
                     assignedLabel={assignedLabelFor(row.id)}
@@ -922,7 +924,7 @@ function FlierBlock({
                       if (rows.length === 0) return [];
                       return [
                         <tr key={key}>
-                          <td colSpan={7} style={{ padding: 0, background: "#141821", borderBottom: "1px solid #20242C" }}>
+                          <td colSpan={5} style={{ padding: 0, background: "#141821", borderBottom: "1px solid #20242C" }}>
                             <div style={{ position: "sticky", left: 0, display: "inline-block", padding: "4px 8px", whiteSpace: "nowrap" }}>
                               <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.6, color }}>{label}</span>{" "}
                               <span style={{ fontSize: 10, color: "#5B6270" }}>· {rows.length} · {note}</span>
@@ -941,6 +943,8 @@ function FlierBlock({
                             onDragStart={noop}
                             playerStickyLeft={38}
                             showPos={false}
+                            showTgt={false}
+                            showLive={false}
                             showPaid={false}
                             actCost={rawCostAt(row.pos, row.effRank)}
                             assignedLabel={assignedLabelFor(row.id)}

@@ -316,10 +316,11 @@ export function BoardRow({
           value={row.max}
           onChange={(e) => onMeta(row.id, "max", e.target.value)}
           onFocus={(e) => {
-            // Start from the target price instead of 0, pre-selected so typing
-            // replaces it outright.
+            // Start from what the league actually pays for this rank instead of
+            // 0, pre-selected so typing replaces it outright.
             const el = e.target as HTMLInputElement;
-            if (row.max === "" && row.target != null) onMeta(row.id, "max", String(row.target));
+            const seed = row.act ?? row.target;
+            if (row.max === "" && seed != null) onMeta(row.id, "max", String(seed));
             requestAnimationFrame(() => el.select());
           }}
         />

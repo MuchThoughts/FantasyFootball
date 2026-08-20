@@ -1,6 +1,7 @@
 import { OWNER_INSIGHTS } from "./data/drafters";
 import { Player } from "./data/players";
 import { PRICE_CURVE } from "./data/priceCurve";
+import { rawCostAt } from "./data/rawDraftCosts";
 import { Strategy } from "./data/strategies";
 import type { RankingConfig, RankingSource } from "./rankings";
 
@@ -237,6 +238,11 @@ export interface BoardRow {
   adp: number;
   effRank: number | null;
   target: number | null;
+  // What this league has actually paid for the Nth-priciest player at the
+  // position, averaged over 2023-2025. This is the price the shopping lists are
+  // built from — a model of the room you're bidding in, rather than of the
+  // player. Null only where there's no cost history for the position at all.
+  act: number | null;
   isKeeper: boolean;
   tier: number | null;
   isDrafted: boolean;
@@ -335,7 +341,8 @@ export function computeBoard(
     const effRank: number | null = posCounts[pos];
     const isKeeper = keptIds.has(uid(p.name));
     const target: number | null = isKeeper ? null : Math.max(Math.round(curveDollars(pos, effRank)), 1);
-    return { id: uid(p.name), name: p.name, pos, team: p.team, adp: p.adp, effRank, target, isKeeper };
+    const act: number | null = isKeeper ? null : rawCostAt(pos, effRank);
+    return { id: uid(p.name), name: p.name, pos, team: p.team, adp: p.adp, effRank, target, act, isKeeper };
   });
   const rankedRows = rows.filter((r) => !r.isKeeper);
 
@@ -529,14 +536,14 @@ export function computeStrategyZones(rows: BoardRow[], strategy: Strategy | unde
     rows.filter((r) => r.isKeeper && r.mine)
   );
   const candidates = rows.filter(
-    (r) => r.pos === pos && r.target != null && !r.isDrafted && !r.isKeeper && r.interest !== "dislike"
+    (r) => r.pos === pos && r.act != null && !r.isDrafted && !r.isKeeper && r.interest !== "dislike"
   );
   return strategy.slots
     .filter((sl) => sl.pos === pos && !keeperSlots.has(sl.id) && (Number(sl.amount) || 0) > 0)
     .map((sl) => {
       const amt = Number(sl.amount) || 0;
       const ids = [...candidates]
-        .sort((a, b) => Math.abs((a.target as number) - amt) - Math.abs((b.target as number) - amt))
+        .sort((a, b) => Math.abs((a.act as number) - amt) - Math.abs((b.act as number) - amt))
         .slice(0, 5)
         .map((r) => r.id);
       return { slotId: sl.id, label: slotLabel(sl.id), amount: amt, ids };
@@ -565,20 +572,25 @@ export const BAND_COLOR: Record<Band, string> = {
 // Loved players sort ahead of Liked, which sort ahead of everyone unrated.
 const interestRank = (r: BoardRow) => (r.interest === "love" ? 0 : r.interest === "like" ? 1 : 2);
 
-// Players still gettable at each position, priced high -> low. The bands slice
-// fixed-size windows out of this ladder, so where a price tier is crowded —
-// a dozen WRs all worth $5 — position within the tier decides who makes the
-// window at all. Players you've Loved or Liked lead their own price tier so
-// they surface into the list for a slot at that price instead of being buried
-// behind higher-ranked names you have no opinion on.
+// Players still gettable at each position, laddered high -> low by ACT: what
+// this league has actually paid for that positional rank over the last three
+// drafts. Shopping off real clearing prices rather than a fitted curve means a
+// slot's list is the players the room has genuinely let go for that money.
+//
+// The bands slice fixed-size windows out of this ladder, so where a price tier
+// is crowded — two dozen WRs the league has all paid $1 for — position within
+// the tier decides who makes the window at all. Players you've Loved or Liked
+// lead their own price tier so they surface into the list for a slot at that
+// price instead of being buried behind higher-ranked names you have no opinion
+// on.
 export function availableByPos(rows: BoardRow[]): Record<Pos, BoardRow[]> {
   const m = {} as Record<Pos, BoardRow[]>;
   POSITIONS.forEach((pos) => {
     m[pos] = rows
-      .filter((r) => r.pos === pos && r.target != null && !r.isDrafted && !r.isKeeper && r.interest !== "dislike")
+      .filter((r) => r.pos === pos && r.act != null && !r.isDrafted && !r.isKeeper && r.interest !== "dislike")
       .sort(
         (a, b) =>
-          (b.target as number) - (a.target as number) ||
+          (b.act as number) - (a.act as number) ||
           interestRank(a) - interestRank(b) ||
           (a.effRank ?? Infinity) - (b.effRank ?? Infinity)
       );
@@ -588,7 +600,7 @@ export function availableByPos(rows: BoardRow[]): Record<Pos, BoardRow[]> {
 
 // The three windows around one slot price on an availability ladder.
 export function bandsAt(avail: BoardRow[], price: number): Record<Band, BoardRow[]> {
-  let start = avail.findIndex((r) => (r.target as number) <= price * BAND_HI);
+  let start = avail.findIndex((r) => (r.act as number) <= price * BAND_HI);
   if (start === -1) start = avail.length;
   const bands: Record<Band, BoardRow[]> = {
     reach: avail.slice(Math.max(0, start - BAND_SIZE), start),
@@ -609,14 +621,14 @@ export function bandsAt(avail: BoardRow[], price: number): Record<Band, BoardRow
   BANDS.forEach((band) => {
     const win = bands[band];
     if (win.length === 0) return;
-    const hi = win[0].target as number;
-    const lo = win[win.length - 1].target as number;
+    const hi = win[0].act as number;
+    const lo = win[win.length - 1].act as number;
     const pulled = avail.filter(
       (r) =>
         !claimed.has(r.id) &&
         interestRank(r) < 2 &&
-        (r.target as number) <= hi &&
-        (r.target as number) >= lo
+        (r.act as number) <= hi &&
+        (r.act as number) >= lo
     );
     if (pulled.length === 0) return;
     pulled.forEach((r) => claimed.add(r.id));
