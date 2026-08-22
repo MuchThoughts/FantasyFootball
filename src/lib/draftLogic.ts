@@ -645,6 +645,21 @@ export function bandsAt(avail: BoardRow[], price: number): Record<Band, BoardRow
 // shows. Endgame slots have no meaningful band (every window collapses onto the
 // same names at the minimum bid), so they take the top of the $1 ladder, which
 // is already ordered Loved/Liked first.
+// Everything worth considering for one slot: the Reach / Target / Settle
+// windows the Targets tab shows, handed over as one pool to choose from.
+// Endgame slots have no meaningful spread — every window collapses onto the
+// same names at the minimum bid — so they get one list of $1 darts instead.
+export function slotCandidates(avail: BoardRow[], price: number): Record<Band, BoardRow[]> {
+  if (price < 2) {
+    return {
+      reach: [],
+      target: avail.filter((r) => (r.act as number) <= 1).slice(0, 3 * BAND_SIZE),
+      settle: [],
+    };
+  }
+  return bandsAt(avail, price);
+}
+
 export function slotShortlist(
   avail: BoardRow[],
   price: number,

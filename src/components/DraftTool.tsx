@@ -556,6 +556,25 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
     [update]
   );
 
+  // The players you've chosen for a slot on the Draft Plan tab, in your own
+  // priority order. An empty list clears the choice so the tab goes back to
+  // suggesting from the shortlist.
+  const setSlotPicks = useCallback(
+    (strategyId: string, slotId: string, ids: string[]) => {
+      update((prev) => ({
+        ...prev,
+        strategies: prev.strategies.map((s) => {
+          if (s.id !== strategyId) return s;
+          const slotPicks = { ...(s.slotPicks ?? {}) };
+          if (ids.length === 0) delete slotPicks[slotId];
+          else slotPicks[slotId] = ids;
+          return { ...s, slotPicks };
+        }),
+      }));
+    },
+    [update]
+  );
+
   const setStrategyName = useCallback(
     (strategyId: string, name: string) => {
       update((prev) => ({ ...prev, strategies: prev.strategies.map((s) => (s.id === strategyId ? { ...s, name } : s)) }));
@@ -978,6 +997,8 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
           assignments={assignments}
           slotLabels={slotLabels}
           onMeta={setMeta}
+          onSlotAmount={setSlotAmount}
+          onSlotPicks={setSlotPicks}
         />
       )}
 

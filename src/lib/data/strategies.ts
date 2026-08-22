@@ -21,6 +21,13 @@ export interface Strategy {
    * slot's price on the Targets tab. Absent when you haven't written one.
    */
   slotNotes?: Record<string, string>;
+  /**
+   * The players you've chosen for a slot, keyed by slot id, in YOUR priority
+   * order — most wanted first, which is not necessarily price order. Set only
+   * once you've picked them on the Draft Plan tab; absent means "not chosen
+   * yet", and that tab falls back to suggesting the top of the shortlist.
+   */
+  slotPicks?: Record<string, string[]>;
   slots: StrategySlot[];
 }
 
