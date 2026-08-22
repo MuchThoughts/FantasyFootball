@@ -44,6 +44,7 @@ import { InsightsTab } from "./InsightsTab";
 import { OffensesTab } from "./OffensesTab";
 import { RawCostsTab } from "./RawCostsTab";
 import { NotesTab } from "./NotesTab";
+import { DraftPlanTab } from "./DraftPlanTab";
 import { TargetsTab } from "./TargetsTab";
 
 const PROFILE_STORAGE_KEY = "ffauction2026:profileId";
@@ -120,7 +121,7 @@ interface DraftToolProps {
 function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: DraftToolProps) {
   const { data, update, loaded, saveState } = useDraftState(profileId);
 
-  const [tab, setTab] = useState<"board" | "targets" | "rankings" | "drafters" | "offenses" | "rawcosts" | "notes">(
+  const [tab, setTab] = useState<"board" | "targets" | "plan" | "rankings" | "drafters" | "offenses" | "rawcosts" | "notes">(
     "board"
   );
   const [posFilter, setPosFilter] = useState("ALL");
@@ -682,6 +683,9 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
         <button style={tab === "targets" ? styles.tabActive : styles.tab} onClick={() => setTab("targets")}>
           Targets
         </button>
+        <button style={tab === "plan" ? styles.tabActive : styles.tab} onClick={() => setTab("plan")}>
+          Draft Plan
+        </button>
         <button style={tab === "rankings" ? styles.tabActive : styles.tab} onClick={() => setTab("rankings")}>
           Rankings
         </button>
@@ -963,6 +967,17 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
           onDislike={setInterestById}
           onPositionNote={setPositionNote}
           onSlotNote={setSlotNote}
+        />
+      )}
+
+      {tab === "plan" && (
+        <DraftPlanTab
+          board={board}
+          strategy={activeStrategy}
+          budget={d.settings.budget}
+          assignments={assignments}
+          slotLabels={slotLabels}
+          onMeta={setMeta}
         />
       )}
 

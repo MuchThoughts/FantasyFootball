@@ -640,6 +640,23 @@ export function bandsAt(avail: BoardRow[], price: number): Record<Band, BoardRow
   return bands;
 }
 
+// The players you'd actually bid on for one slot, best first: anyone pinned to
+// it, then the Target band at that price — the same window the Targets tab
+// shows. Endgame slots have no meaningful band (every window collapses onto the
+// same names at the minimum bid), so they take the top of the $1 ladder, which
+// is already ordered Loved/Liked first.
+export function slotShortlist(
+  avail: BoardRow[],
+  price: number,
+  pinnedIds: Set<string>,
+  limit = BAND_SIZE
+): BoardRow[] {
+  const pinned = avail.filter((r) => pinnedIds.has(r.id));
+  const taken = new Set(pinned.map((r) => r.id));
+  const pool = price < 2 ? avail.filter((r) => (r.act as number) <= 1) : bandsAt(avail, price).target;
+  return [...pinned, ...pool.filter((r) => !taken.has(r.id))].slice(0, limit);
+}
+
 // Which band each player falls in for the active strategy, considering every
 // open slot price. A player in range of several slots keeps the best standing:
 // Target beats Reach, Reach beats Settle.
