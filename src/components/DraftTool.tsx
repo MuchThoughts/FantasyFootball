@@ -30,7 +30,7 @@ import { FINISH_2025 } from "@/lib/data/finish2025";
 import { points2025ForFinish } from "@/lib/data/points2025";
 import { SlotMenu, SlotMenuState } from "./SlotMenu";
 import { NoteEditor, NoteEditorState } from "./NoteEditor";
-import { BUILTIN_SOURCE_ID, BUILTIN_SOURCE_NAME, RankingConfig, RankingSource, applyRanking } from "@/lib/rankings";
+import { BUILTIN_SOURCE_ID, BUILTIN_SOURCE_NAME, RankingConfig, RankingSource, allSources, applyRanking } from "@/lib/rankings";
 import { dropEdgeStyle, dropRank, useRowDrag } from "@/hooks/useRowDrag";
 import { useProfiles } from "@/hooks/useProfiles";
 import { defaultDraftData, useDraftState } from "@/hooks/useDraftState";
@@ -147,9 +147,13 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
 
   const rankingLabel = useMemo(() => {
     if (d.ranking.mode === "blend") return "Blend";
-    if (d.ranking.activeSourceId === BUILTIN_SOURCE_ID) return BUILTIN_SOURCE_NAME;
-    return d.rankingSources.find((s) => s.id === d.ranking.activeSourceId)?.name ?? BUILTIN_SOURCE_NAME;
-  }, [d.ranking, d.rankingSources]);
+    // Look the name up across every selectable source, shipped ones included —
+    // matching only against uploads would silently mislabel them as ADP.
+    return (
+      allSources(basePlayers, d.rankingSources).find((s) => s.id === d.ranking.activeSourceId)?.name ??
+      BUILTIN_SOURCE_NAME
+    );
+  }, [d.ranking, d.rankingSources, basePlayers]);
 
   const activeStrategy = useMemo(
     () => d.strategies.find((s) => s.id === d.activeStrategyId) || d.strategies[0],

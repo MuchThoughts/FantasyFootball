@@ -114,14 +114,17 @@ export function RankingsTab({
           <button
             style={config.mode === "blend" ? { ...styles.chip, ...chipActive("ALL") } : styles.chip}
             onClick={() => onConfig((prev) => ({ ...prev, mode: "blend" }))}
-            disabled={sources.length === 0}
-            title={sources.length === 0 ? "Upload at least one ranking to blend" : "Weighted average of the sources below"}
+            // Two shipped sources ship with the app, so blending is worth doing
+            // before you've uploaded anything of your own.
+            disabled={selectable.length < 2}
+            title={selectable.length < 2 ? "Need at least two rankings to blend" : "Weighted average of the sources below"}
           >
             ⚖ Blend
           </button>
         </div>
 
-        {activeSource && activeSource.id !== BUILTIN_SOURCE_ID && (
+        {/* Rename/delete belong to uploads only — the shipped sources aren't stored. */}
+        {activeSource && sources.some((s) => s.id === activeSource.id) && (
           <div style={{ ...styles.row, marginTop: 8 }}>
             <input
               style={{ ...styles.input, flex: 1 }}
