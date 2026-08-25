@@ -159,11 +159,26 @@ function InsightCard({
   const selectedCount = ranked.filter((k) => isExpectedKeeper(k.id, keeperPicks)).length;
 
   return (
-    <div style={{ ...styles.playerCard, borderColor: isSean ? "#4CAF6B" : "#2A2F38" }}>
+    // Former owners are dimmed so they don't read as rivals you're bidding against.
+    <div
+      style={{
+        ...styles.playerCard,
+        borderColor: isSean ? "#4CAF6B" : "#2A2F38",
+        opacity: d.formerOwner ? 0.72 : 1,
+      }}
+    >
       <div style={styles.playerRowTop}>
         <div style={styles.playerInfo}>
           <div style={styles.playerName}>
             {d.owner} {isSean && <span style={styles.mineTag}>YOU</span>}
+            {d.formerOwner && (
+              <span
+                style={{ ...styles.mineTag, color: "#8B92A0" }}
+                title="Left the league after 2025 — kept here for the history. His roster is back in the 2026 pool."
+              >
+                LEFT AFTER &rsquo;25
+              </span>
+            )}
           </div>
           <div style={styles.playerMeta}>
             {d.team}
@@ -245,7 +260,12 @@ function InsightCard({
           <div style={{ fontSize: 10, color: "#5B6270", marginBottom: 6 }}>
             Top 6 by value (market − keeper cost), where market is the projected draft cost for this player&apos;s
             2026 positional rank (see the Market column&apos;s tooltip). Check the two you expect{" "}
-            {isSean ? "to keep" : `${d.owner} to keep`} — checked players are treated as kept: off the board and
+            {d.formerOwner
+              ? `${d.owner}'s 2025 roster — all back in the pool`
+              : isSean
+              ? "to keep"
+              : `${d.owner} to keep`}{" "}
+            — checked players are treated as kept: off the board and
             their cost pre-committed.
           </div>
 

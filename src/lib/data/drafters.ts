@@ -5,10 +5,13 @@
 // "NPF's Bookie" (2023) is Kyle (his $3 D'Andre Swift became Benjels' $8 keep).
 // All stats below therefore cover three full drafts for every owner.
 //
-// David (VFL) and Jonathan (AFC Richmond) left the league after 2025, so they
-// have no entry here: with no one to keep them, their whole rosters go back
-// into the 2026 auction pool. Historical league averages still include their
-// drafts, since those bids really did set the market.
+// David (VFL) and Jonathan (AFC Richmond) left the league after 2025. Their
+// profiles are kept for the history — league averages include their drafts, and
+// their bids are baked into the three-year price curve every target price comes
+// from — but they are flagged formerOwner and NONE of their keeper options is
+// marked likely, because with no one to keep them their whole rosters went back
+// into the 2026 auction pool. Their options are still listed and checkable, so
+// you can treat one as kept if a replacement owner inherits the roster.
 //
 // Metric definitions:
 // - picksTo120: sorted by price, how many players it takes to hit $120 of the
@@ -46,6 +49,11 @@ export interface OwnerInsight {
   owner: string;
   team: string; // current (2026) team name
   teamHistory?: string; // older names, if they rebrand
+  // Left the league after 2025. Their profiles stay for the history — their
+  // bids are baked into the three-year price curve — but their rosters went
+  // back into the 2026 pool, so none of their keeper options is likely by
+  // default.
+  formerOwner?: boolean;
   archetype: string;
   picksTo120: number;
   onesPerYear: number;
@@ -107,6 +115,68 @@ export const OWNER_INSIGHTS: OwnerInsight[] = [
       { player: "DK Metcalf", pos: "WR", cost: 21, note: "2025 salary $16, market ~$8" },
     ],
     keeperOutlook: "Best pair by 2026 rank: Pickens $16 + Stafford $15 = a WR2 and a starting QB for $31, entering the auction with $169 and QB1 money intact.",
+  },
+  {
+    owner: "David",
+    team: "VFL",
+    teamHistory: "was I'd rather be f... in '23",
+    formerOwner: true,
+    archetype: "QB punter, no dumpster-diver",
+    picksTo120: 3.7,
+    onesPerYear: 1.0,
+    top3Share: 56.8,
+    earlyShare: 74,
+    maxEver: { player: "Christian McCaffrey (keeper)", price: 59, year: 2024 },
+    posShare: { QB: 18.8, RB: 36.9, WR: 38.3, TE: 5.3, DEF: 0.3 },
+    posDelta: { QB: -10.0, RB: 5.1, WR: 4.2, TE: 0.6, DEF: -0.1 },
+    reads: [
+      "Left the league after 2025, so this is history rather than a live read — but his bids are in the three-year price curve every target on the board is built from.",
+      "The biggest QB punter over three years (-10 pts vs league; $26 total QB room in '24) — he's a core reason QB7–13 went cheap. In '25 he pivoted: Dak $26 + McCarthy $25.",
+      "Never shopped the $1 bin: zero $1 non-DEF buys in '24 AND '25 (league avg is 4/yr). His bench was $2–$11 veterans, not lottery tickets.",
+      "Kept at the very top when he had an elite: CMC $59 + CeeDee $45 in '24 — $104 pre-committed.",
+    ],
+    loyalty: ["Christian McCaffrey", "CeeDee Lamb", "Tony Pollard", "Chase Brown", "Brock Bowers", "Kirk Cousins"],
+    keeperHistory: "2024: CMC $59, CeeDee $45 · 2025: Chase Brown $10, Bowers $7",
+    keeperOptions: [
+      { player: "Chase Brown", pos: "RB", cost: 15, note: "Was his clearest surplus (2026 RB9, market ~$29) — back in the pool now" },
+      { player: "Sam Darnold", pos: "QB", cost: 14, note: "Fell to 2026 QB23 in Seattle, market ~$3" },
+      { player: "Breece Hall", pos: "RB", cost: 26, note: "2026 RB19, market ~$12" },
+      { player: "Ricky Pearsall", pos: "WR", cost: 16, note: "2026 WR41" },
+      { player: "Malik Nabers", pos: "WR", cost: 46, note: "Still WR10 talent, market ~$22 coming off the injury" },
+    ],
+    keeperOutlook:
+      "Gone after 2025 — his whole roster went back into the 2026 pool, so nothing here is checked by default. Chase Brown was the one real surplus and is now yours to bid on.",
+  },
+  {
+    owner: "Jonathan",
+    team: "AFC Richmond",
+    formerOwner: true,
+    archetype: "QB hoarder",
+    picksTo120: 4.0,
+    onesPerYear: 5.0,
+    top3Share: 56.2,
+    earlyShare: 82,
+    maxEver: { player: "Josh Allen", price: 62, year: 2024 },
+    posShare: { QB: 32.3, RB: 30.2, WR: 33.0, TE: 4.0, DEF: 0.3 },
+    posDelta: { QB: 3.5, RB: -1.6, WR: -1.1, TE: -0.7, DEF: -0.1 },
+    reads: [
+      "Left the league after 2025. His exit is the single biggest change to QB pricing: he drafted exactly FOUR QBs in all three drafts, and that demand is simply gone in 2026.",
+      "With him out, the $1–6 QB3 tier should clear cheaper than the curve implies — the curve still carries his bids.",
+      "Structure swung wildly: '24 was stars-and-scrubs (Allen $62 + Jefferson $53, 72% top-3, eight $1 players), '25 was spread.",
+      "The best flier-to-keeper converter in league history: turned $6 Bucky and $6 Fields into keeps.",
+    ],
+    loyalty: ["Breece Hall", "Anthony Richardson", "Justin Fields", "Nick Chubb"],
+    keeperHistory: "2024: Richardson $29, Breece $28 · 2025: Bucky $6, Fields $6",
+    keeperOptions: [
+      { player: "Bucky Irving", pos: "RB", cost: 11, note: "Was his best tag (2026 RB20, market ~$11) — back in the pool now" },
+      { player: "Tyler Warren", pos: "TE", cost: 10, note: "2026 TE4, market ~$6" },
+      { player: "Tucker Kraft", pos: "TE", cost: 8, note: "2026 TE7 coming off the ACL — market ~$4" },
+      { player: "Rome Odunze", pos: "WR", cost: 13, note: "2026 WR29, market ~$6" },
+      { player: "Cam Ward", pos: "QB", cost: 11, note: "2026 QB26" },
+      { player: "Ashton Jeanty", pos: "RB", cost: 52, note: "2026 RB7, market ~$39" },
+    ],
+    keeperOutlook:
+      "Gone after 2025 — nothing here is checked by default, and his whole roster is in the 2026 pool. The bigger effect is his absence: four QBs a draft of demand has left the room.",
   },
   {
     owner: "Adam",
