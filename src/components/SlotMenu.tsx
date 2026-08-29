@@ -21,12 +21,15 @@ interface SlotMenuProps {
   onDislike: () => void;
   onAssign: (slotId: string | null) => void;
   onNote?: () => void;
+  // Context-specific actions (Live Draft: mark drafted, claim as yours). Shown
+  // above the slot list, below the note/dislike items.
+  extras?: { label: string; color?: string; onClick: () => void }[];
   onClose: () => void;
 }
 
 // Press-and-hold popup: dislike the player, or pin him to one of your draft
 // slots so he leads that slot's Targets list. Anchored to the tapped name.
-export function SlotMenu({ menu, slots, onDislike, onAssign, onNote, onClose }: SlotMenuProps) {
+export function SlotMenu({ menu, slots, onDislike, onAssign, onNote, extras, onClose }: SlotMenuProps) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
@@ -85,6 +88,12 @@ export function SlotMenu({ menu, slots, onDislike, onAssign, onNote, onClose }: 
             {menu.disliked ? "↩ Un-dislike" : "✕ Dislike"}
           </span>
         </button>
+
+        {(extras ?? []).map((x) => (
+          <button key={x.label} style={menuItem(false)} onClick={x.onClick}>
+            <span style={{ color: x.color ?? "#C6CAD2" }}>{x.label}</span>
+          </button>
+        ))}
 
         {menu.assignedSlotId && (
           <button style={menuItem(false)} onClick={() => onAssign(null)}>

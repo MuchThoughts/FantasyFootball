@@ -11,6 +11,9 @@ import {
   POS_COLOR,
   POSITIONS,
   Pos,
+  PositionBudget,
+  resolvePositionBudget,
+  SlotFlex,
   SlotLabel,
 } from "@/lib/draftLogic";
 import { rawCostAt } from "@/lib/data/rawDraftCosts";
@@ -20,6 +23,33 @@ import { BoardRow } from "./BoardRow";
 import { PriceInput } from "./PriceInput";
 import { SlotMenuState } from "./SlotMenu";
 import { styles, chipActive } from "./styles";
+
+// One colour per pick within a position, in price order. Distinct enough to tell
+// apart as a row background at low alpha and as a star at full strength.
+const PICK_COLORS = ["#5B9BD5", "#E8A33D", "#C77DD2", "#4CAF6B", "#D2695B", "#7E8CE0", "#59B3B0", "#B48A4A"];
+
+// How far either side of a pick's price its shading reaches, counted in players
+// you've rated — 4 dearer, anyone at the price, 4 cheaper.
+const WINDOW = 4;
+
+const FLEX_META: Record<SlotFlex, { icon: string; label: string; title: string }> = {
+  fixed: { icon: "=", label: "fixed", title: "Never moves, whatever the rest of the position does" },
+  up: { icon: "▲", label: "flex up", title: "Soaks up money freed elsewhere in this position" },
+  down: { icon: "▼", label: "flex down", title: "Gives money back when another pick here goes over" },
+};
+const FLEX_CYCLE: SlotFlex[] = ["fixed", "up", "down"];
+
+interface PickView {
+  id: string;
+  label: string;
+  color: string;
+  price: number;
+  nominal: number;
+  flex: SlotFlex;
+  filled: boolean;
+  spent: number;
+  player: BoardRowType | null;
+}
 
 interface LiveDraftTabProps {
   board: Board;
@@ -33,11 +63,14 @@ interface LiveDraftTabProps {
   onMeta: (id: string, field: "max", value: string) => void;
   onRate: (row: BoardRowType, value: Interest) => void;
   onPositionBudget: (strategyId: string, pos: Pos, value: string) => void;
+  onSlotAmount: (strategyId: string, slotId: string, value: string) => void;
+  onSlotFlex: (strategyId: string, slotId: string, flex: SlotFlex) => void;
 }
 
-// The draft-night view: one position at a time, your money for that position at
-// the top, and every player at it underneath. Ratings do the filtering — the
-// players you've said nothing about are out of the way until you want them.
+// Draft night: one position at a time. The position's money is split across its
+// picks, each pick owns a colour, and the players you've rated are shaded by the
+// pick whose price they sit nearest — so a glance tells you which pick a name is
+// for. Buy someone and the remaining picks re-solve around what you actually paid.
 export function LiveDraftTab({
   board,
   strategy,
@@ -50,41 +83,119 @@ export function LiveDraftTab({
   onMeta,
   onRate,
   onPositionBudget,
+  onSlotAmount,
+  onSlotFlex,
 }: LiveDraftTabProps) {
   const [pos, setPos] = useState<Pos>("QB");
   const [showNeutral, setShowNeutral] = useState(false);
   const [showDisliked, setShowDisliked] = useState(false);
   const [hideGone, setHideGone] = useState(false);
 
-  // Planned, spent and left for every position, so the subtabs can carry their
-  // own numbers without recomputing per tab.
-  const perPos = useMemo(() => {
-    const out = {} as Record<Pos, { target: number; spent: number; bought: number; isOverride: boolean }>;
+  const budgets = useMemo(() => {
+    const out = {} as Record<Pos, PositionBudget & { picks: PickView[] }>;
+    const mine = board.rows.filter((r) => r.mine && (r.isDrafted || r.isKeeper));
+
     for (const p of POSITIONS) {
-      const slotSum = (strategy?.slots ?? []).filter((s) => s.pos === p).reduce((n, s) => n + (Number(s.amount) || 0), 0);
-      const override = strategy?.positionBudgets?.[p];
-      const mine = board.rows.filter((r) => r.pos === p && r.mine && (r.isDrafted || r.isKeeper));
-      out[p] = {
-        target: override ?? slotSum,
-        // Keepers are already paid for out of the same budget, so they count.
-        spent: mine.reduce((n, r) => n + (Number(r.isKeeper ? r.keeperCost : r.paid) || 0), 0),
-        bought: mine.length,
-        isOverride: override != null,
-      };
+      const slots = (strategy?.slots ?? []).filter((s) => s.pos === p);
+      const slotSum = slots.reduce((n, s) => n + (Number(s.amount) || 0), 0);
+      const target = strategy?.positionBudgets?.[p] ?? slotSum;
+
+      // Which of your players fills which pick. An explicit target you set by
+      // right-clicking wins; anyone else you own falls to their closest-priced
+      // open pick.
+      const owned = mine.filter((r) => r.pos === p);
+      const bySlot = new Map<string, BoardRowType>();
+      const claimed = new Set<string>();
+      for (const r of owned) {
+        const a = assignments[r.id];
+        if (a && slots.some((s) => s.id === a) && !bySlot.has(a)) {
+          bySlot.set(a, r);
+          claimed.add(r.id);
+        }
+      }
+      for (const r of owned) {
+        if (claimed.has(r.id)) continue;
+        const cost = Number(r.isKeeper ? r.keeperCost : r.paid) || 0;
+        const free = slots.filter((s) => !bySlot.has(s.id));
+        if (free.length === 0) break;
+        const best = free.reduce((a, b) =>
+          Math.abs((Number(b.amount) || 0) - cost) < Math.abs((Number(a.amount) || 0) - cost) ? b : a
+        );
+        bySlot.set(best.id, r);
+      }
+
+      const resolved = resolvePositionBudget(
+        target,
+        slots.map((s) => ({
+          id: s.id,
+          nominal: Number(s.amount) || 0,
+          flex: strategy?.slotFlex?.[s.id] ?? "fixed",
+          player: bySlot.get(s.id) ?? null,
+        }))
+      );
+
+      const picks: PickView[] = resolved.slots
+        .map((r) => ({
+          id: r.id,
+          label: slotLabels.get(r.id)?.label ?? r.id,
+          color: "",
+          price: r.effective,
+          nominal: r.nominal,
+          flex: r.flex,
+          filled: r.filled,
+          spent: r.spent,
+          player: r.player,
+        }))
+        .sort((a, b) => b.nominal - a.nominal || a.id.localeCompare(b.id))
+        .map((v, i) => ({ ...v, color: PICK_COLORS[i % PICK_COLORS.length] }));
+
+      out[p] = { ...resolved, picks };
     }
     return out;
-  }, [strategy, board.rows]);
+  }, [strategy, board.rows, assignments, slotLabels]);
+
+  const cur = budgets[pos];
+
+  // Players you've rated, priced high to low — the ladder the pick windows are
+  // cut from. Shading only ever lands on names you've said you want.
+  const ratedLadder = useMemo(
+    () =>
+      board.rows
+        .filter(
+          (r) => r.pos === pos && !r.isDrafted && !r.isKeeper && (r.interest === "love" || r.interest === "like")
+        )
+        .sort((a, b) => (b.act ?? 0) - (a.act ?? 0)),
+    [board.rows, pos]
+  );
+
+  // playerId -> the pick whose window he sits in. Windows overlap where picks
+  // are close in price, so the nearest pick wins and ties go to the dearer one.
+  const pickByPlayer = useMemo(() => {
+    const out = new Map<string, PickView>();
+    const best = new Map<string, number>();
+    for (const pick of cur.picks) {
+      if (pick.filled) continue;
+      const price = pick.price;
+      const dearer = ratedLadder.filter((r) => (r.act ?? 0) > price).slice(-WINDOW);
+      const exact = ratedLadder.filter((r) => (r.act ?? 0) === price);
+      const cheaper = ratedLadder.filter((r) => (r.act ?? 0) < price).slice(0, WINDOW);
+      for (const r of [...dearer, ...exact, ...cheaper]) {
+        const d = Math.abs((r.act ?? 0) - price);
+        const prior = best.get(r.id);
+        if (prior === undefined || d < prior) {
+          best.set(r.id, d);
+          out.set(r.id, pick);
+        }
+      }
+    }
+    return out;
+  }, [cur.picks, ratedLadder]);
 
   const rows = useMemo(() => {
     const all = board.rows.filter((r) => r.pos === pos);
     return all.filter((r) => {
-      // Your own roster is always visible — you need to see what you've built.
       if (r.mine) return true;
       if (hideGone && (r.isDrafted || r.isKeeper)) return false;
-      // Everyone else is filtered by rating alone, including keepers and players
-      // already bought tonight: an unrated player you don't care about shouldn't
-      // reappear just because someone else took him. Flip Neutral on to record a
-      // price for one.
       if (r.interest === "love" || r.interest === "like") return true;
       if (r.interest === "dislike") return showDisliked;
       return showNeutral;
@@ -92,21 +203,18 @@ export function LiveDraftTab({
   }, [board.rows, pos, showNeutral, showDisliked, hideGone]);
 
   const hiddenCount = useMemo(() => {
-    const all = board.rows.filter((r) => r.pos === pos);
+    const all = board.rows.filter((r) => r.pos === pos && !r.mine);
     return {
-      neutral: all.filter((r) => !r.mine && r.interest === "neutral").length,
-      disliked: all.filter((r) => !r.mine && r.interest === "dislike").length,
+      neutral: all.filter((r) => r.interest === "neutral").length,
+      disliked: all.filter((r) => r.interest === "dislike").length,
     };
   }, [board.rows, pos]);
 
-  const noop = () => {};
-  const cur = perPos[pos];
-  const left = cur.target - cur.spent;
   const overall = board.myBudgetRemaining;
+  const left = cur.target - cur.spent;
 
   return (
     <div>
-      {/* Running totals: your whole budget, then this position's slice. */}
       <div style={{ ...styles.panel, padding: "8px 10px", marginBottom: 8 }}>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 14, alignItems: "baseline" }}>
           <Stat label="budget left" value={fmtMoney(overall)} tone={overall < 0 ? "bad" : "good"} big />
@@ -119,7 +227,7 @@ export function LiveDraftTab({
           />
           <div style={{ marginLeft: "auto", display: "flex", gap: 10 }}>
             {POSITIONS.map((p) => {
-              const v = perPos[p];
+              const v = budgets[p];
               return (
                 <div key={p} style={{ textAlign: "right", fontSize: 9.5, color: "#5B6270" }}>
                   <span style={{ color: POS_COLOR[p], fontWeight: 700 }}>{p}</span>{" "}
@@ -133,81 +241,129 @@ export function LiveDraftTab({
         </div>
       </div>
 
-      {/* Position subtabs */}
       <div style={styles.chipRow}>
         {POSITIONS.map((p) => (
-          <button
-            key={p}
-            style={pos === p ? { ...styles.chip, ...chipActive(p) } : styles.chip}
-            onClick={() => setPos(p)}
-          >
+          <button key={p} style={pos === p ? { ...styles.chip, ...chipActive(p) } : styles.chip} onClick={() => setPos(p)}>
             {p}
-            <span style={{ fontSize: 9, color: "#5B6270" }}> {perPos[p].bought}</span>
+            <span style={{ fontSize: 9, color: "#5B6270" }}> {budgets[p].slots.filter((s) => s.filled).length}</span>
           </button>
         ))}
       </div>
 
-      {/* This position's money */}
-      <div
-        style={{
-          ...styles.panel,
-          padding: "8px 10px",
-          marginBottom: 8,
-          display: "flex",
-          flexWrap: "wrap",
-          gap: 12,
-          alignItems: "center",
-        }}
-      >
-        <span style={{ ...styles.posTagSm, background: POS_COLOR[pos] }}>{pos}</span>
-        <span style={{ fontSize: 10, color: "#8B92A0" }}>target</span>
-        <PriceInput value={cur.target} onCommit={(v) => strategy && onPositionBudget(strategy.id, pos, v)} />
-        {cur.isOverride && strategy && (
-          <button
-            style={{ ...styles.smallBtn, padding: "1px 7px", fontSize: 10 }}
-            title="Go back to the sum of this position's slot prices"
-            onClick={() => onPositionBudget(strategy.id, pos, "")}
-          >
-            reset
-          </button>
-        )}
-        <Stat label="spent" value={fmtMoney(cur.spent)} />
-        <Stat label="left" value={fmtMoney(left)} tone={left < 0 ? "bad" : "good"} big />
-        <Stat label="bought" value={String(cur.bought)} />
+      {/* The position's money, and how it splits across the picks */}
+      <div style={{ ...styles.panel, padding: "8px 10px", marginBottom: 8 }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center", marginBottom: 8 }}>
+          <span style={{ ...styles.posTagSm, background: POS_COLOR[pos] }}>{pos}</span>
+          <span style={{ fontSize: 10, color: "#8B92A0" }}>position target</span>
+          <PriceInput value={cur.target} onCommit={(v) => strategy && onPositionBudget(strategy.id, pos, v)} />
+          {strategy?.positionBudgets?.[pos] != null && (
+            <button
+              style={{ ...styles.smallBtn, padding: "1px 7px", fontSize: 10 }}
+              title="Back to the sum of this position's picks"
+              onClick={() => onPositionBudget(strategy.id, pos, "")}
+            >
+              reset
+            </button>
+          )}
+          <Stat label="spent" value={fmtMoney(cur.spent)} />
+          <Stat label="left" value={fmtMoney(left)} tone={left < 0 ? "bad" : "good"} big />
+          {cur.unallocated !== 0 && (
+            <span
+              style={{ fontSize: 10, color: cur.unallocated > 0 ? "#E8A33D" : "#E1524B" }}
+              title={
+                cur.unallocated > 0
+                  ? "No open pick here is set to flex up, so this money has nowhere to go"
+                  : "No open pick here can give up enough, so the position is over its target"
+              }
+            >
+              {cur.unallocated > 0
+                ? `${fmtMoney(cur.unallocated)} spare — no pick flexes up`
+                : `${fmtMoney(-cur.unallocated)} over — nothing left to take`}
+            </span>
+          )}
+        </div>
+
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+          {cur.picks.map((pk) => (
+            <div
+              key={pk.id}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 5,
+                background: pk.filled ? "rgba(76,175,107,0.10)" : "#1C2128",
+                border: `1px solid ${pk.filled ? "#2E7D46" : pk.color}`,
+                borderRadius: 6,
+                padding: "3px 7px",
+                opacity: pk.filled ? 0.75 : 1,
+              }}
+            >
+              <span style={{ color: pk.color, fontSize: 11 }}>★</span>
+              <span style={{ fontSize: 11, fontWeight: 600, color: "#C6CAD2" }}>{pk.label}</span>
+              {pk.filled ? (
+                <span style={{ ...styles.tdMono, fontSize: 11, color: "#8FCB9E" }}>
+                  {pk.player?.name.split(" ").slice(-1)[0]} {fmtMoney(pk.spent)}
+                </span>
+              ) : (
+                <>
+                  <span style={{ fontSize: 11, color: "#5B6270" }}>$</span>
+                  <PriceInput value={pk.price} onCommit={(v) => strategy && onSlotAmount(strategy.id, pk.id, v)} />
+                  {pk.price !== pk.nominal && (
+                    <span
+                      style={{ ...styles.tdMono, fontSize: 9.5, color: pk.price > pk.nominal ? "#4CAF6B" : "#E1524B" }}
+                      title={`Planned ${fmtMoney(pk.nominal)}, flexed to ${fmtMoney(pk.price)}`}
+                    >
+                      {pk.price > pk.nominal ? "+" : ""}
+                      {pk.price - pk.nominal}
+                    </span>
+                  )}
+                  <button
+                    onClick={() =>
+                      strategy &&
+                      onSlotFlex(strategy.id, pk.id, FLEX_CYCLE[(FLEX_CYCLE.indexOf(pk.flex) + 1) % FLEX_CYCLE.length])
+                    }
+                    title={FLEX_META[pk.flex].title + " — click to change"}
+                    style={{
+                      background: "transparent",
+                      border: "1px solid #3A3F4A",
+                      borderRadius: 4,
+                      color: pk.flex === "up" ? "#4CAF6B" : pk.flex === "down" ? "#E8A33D" : "#5B6270",
+                      fontSize: 9,
+                      padding: "1px 5px",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {FLEX_META[pk.flex].icon} {FLEX_META[pk.flex].label}
+                  </button>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
       </div>
 
-      {/* Who's showing */}
       <div style={{ ...styles.chipRow, marginBottom: 6 }}>
-        <button
-          style={showNeutral ? { ...styles.chip, ...chipActive("ALL") } : styles.chip}
-          onClick={() => setShowNeutral((v) => !v)}
-        >
+        <button style={showNeutral ? { ...styles.chip, ...chipActive("ALL") } : styles.chip} onClick={() => setShowNeutral((v) => !v)}>
           {showNeutral ? "✓" : "+"} Neutral <span style={{ fontSize: 9, color: "#5B6270" }}>{hiddenCount.neutral}</span>
         </button>
-        <button
-          style={showDisliked ? { ...styles.chip, ...chipActive("ALL") } : styles.chip}
-          onClick={() => setShowDisliked((v) => !v)}
-        >
-          {showDisliked ? "✓" : "+"} Disliked{" "}
-          <span style={{ fontSize: 9, color: "#5B6270" }}>{hiddenCount.disliked}</span>
+        <button style={showDisliked ? { ...styles.chip, ...chipActive("ALL") } : styles.chip} onClick={() => setShowDisliked((v) => !v)}>
+          {showDisliked ? "✓" : "+"} Disliked <span style={{ fontSize: 9, color: "#5B6270" }}>{hiddenCount.disliked}</span>
         </button>
-        <button
-          style={hideGone ? { ...styles.chip, ...chipActive("ALL") } : styles.chip}
-          onClick={() => setHideGone((v) => !v)}
-        >
+        <button style={hideGone ? { ...styles.chip, ...chipActive("ALL") } : styles.chip} onClick={() => setHideGone((v) => !v)}>
           {hideGone ? "✓" : "+"} Hide gone
         </button>
       </div>
 
       <div style={{ fontSize: 10.5, color: "#5B6270", marginBottom: 8 }}>
-        Showing Loved and Liked {pos}s plus anyone on your roster. Type what a player went for in{" "}
-        <b style={{ color: "#8B92A0" }}>Paid</b>; hit <b style={{ color: "#8B92A0" }}>ME</b> when you win one so it
-        counts against your budget. Press and hold a name to dislike or assign it.
+        Rows are shaded by the pick they&apos;re priced for — darker for Loved than Liked. Right-click a player to mark
+        him drafted or make him your ★ target for a pick. Type what he went for in{" "}
+        <b style={{ color: "#8B92A0" }}>Paid</b>, then hit <b style={{ color: "#8B92A0" }}>ME</b> if you won him, and the
+        other picks re-solve around it.
       </div>
 
       {rows.length === 0 ? (
         <div style={{ ...styles.panel, padding: 12, fontSize: 11.5, color: "#8B92A0" }}>
-          No {pos}s to show. You haven&apos;t Loved or Liked any — turn on Neutral above to see the rest.
+          No {pos}s to show. Turn on Neutral above to see the rest.
         </div>
       ) : (
         <div style={styles.tableWrap}>
@@ -216,17 +372,17 @@ export function LiveDraftTab({
               <tr>
                 <th style={{ ...styles.th, ...styles.thSticky }}>Rk</th>
                 <th style={{ ...styles.th, ...styles.thSticky2, left: 38 }}>Player</th>
-                <th style={styles.th} title="Last season's positional finish (e.g. RB5 = finished as the RB5)">
+                <th style={styles.th} title="Last season's positional finish">
                   2025
                 </th>
                 <th style={styles.th} title="2025 season fantasy point total">
                   Pts
                 </th>
                 <th style={styles.th}>Tier</th>
-                <th style={styles.th} title="What this positional rank actually cost in your league (weighted 3-yr price)">
+                <th style={styles.th} title="What this positional rank actually cost in your league">
                   Act
                 </th>
-                <th style={styles.th} title="The most you're willing to pay for this player">
+                <th style={styles.th} title="The most you're willing to pay">
                   Max
                 </th>
                 <th style={styles.th} title="What he actually went for tonight">
@@ -238,35 +394,40 @@ export function LiveDraftTab({
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => (
-                <BoardRow
-                  key={row.id}
-                  row={row}
-                  tierBreak={false}
-                  isTarget={false}
-                  // Reordering belongs on the Board and Rankings tabs, not here.
-                  dragEnabled={false}
-                  dragging={false}
-                  dropEdge={{}}
-                  onDragStart={noop}
-                  band={bandByPlayer.get(row.id) ?? null}
-                  playerStickyLeft={38}
-                  showPos={false}
-                  showTgt={false}
-                  showLive={false}
-                  showPaid
-                  showMine
-                  actCost={rawCostAt(row.pos, row.effRank)}
-                  finish2025={FINISH_2025[row.id] ?? null}
-                  pts2025={points2025ForFinish(FINISH_2025[row.id])}
-                  assignedLabel={assignments[row.id] ? slotLabels.get(assignments[row.id])?.label ?? null : null}
-                  onOpenMenu={onOpenMenu}
-                  onPaid={onPaid}
-                  onMine={onMine}
-                  onMeta={onMeta}
-                  onRate={onRate}
-                />
-              ))}
+              {rows.map((row) => {
+                const pick = pickByPlayer.get(row.id);
+                const assignedPick = cur.picks.find((p) => p.id === assignments[row.id]);
+                return (
+                  <BoardRow
+                    key={row.id}
+                    row={row}
+                    tierBreak={false}
+                    isTarget={false}
+                    dragEnabled={false}
+                    dragging={false}
+                    dropEdge={{}}
+                    onDragStart={noop}
+                    band={bandByPlayer.get(row.id) ?? null}
+                    playerStickyLeft={38}
+                    showPos={false}
+                    showTgt={false}
+                    showLive={false}
+                    showPaid
+                    showMine
+                    pickTint={pick ? tintFor(pick.color, row.interest) : null}
+                    starColor={assignedPick?.color ?? null}
+                    actCost={rawCostAt(row.pos, row.effRank)}
+                    finish2025={FINISH_2025[row.id] ?? null}
+                    pts2025={points2025ForFinish(FINISH_2025[row.id])}
+                    assignedLabel={assignments[row.id] ? slotLabels.get(assignments[row.id])?.label ?? null : null}
+                    onOpenMenu={onOpenMenu}
+                    onPaid={onPaid}
+                    onMine={onMine}
+                    onMeta={onMeta}
+                    onRate={onRate}
+                  />
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -275,17 +436,17 @@ export function LiveDraftTab({
   );
 }
 
-function Stat({
-  label,
-  value,
-  tone,
-  big,
-}: {
-  label: string;
-  value: string;
-  tone?: "good" | "bad" | "warn";
-  big?: boolean;
-}) {
+const noop = () => {};
+
+// The pick's colour at love/like strength — same hue, darker for the players you
+// actually want.
+function tintFor(hex: string, interest: Interest): string {
+  const n = parseInt(hex.slice(1), 16);
+  const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  return `rgba(${r}, ${g}, ${b}, ${interest === "love" ? 0.34 : 0.14})`;
+}
+
+function Stat({ label, value, tone, big }: { label: string; value: string; tone?: "good" | "bad" | "warn"; big?: boolean }) {
   const color = tone === "bad" ? "#E1524B" : tone === "warn" ? "#E8A33D" : tone === "good" ? "#4CAF6B" : "#EDEEF0";
   return (
     <div>

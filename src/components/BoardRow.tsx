@@ -50,6 +50,11 @@ interface BoardRowProps {
   // Live-draft only: mark a bought player as yours, so he counts against your
   // budget rather than just leaving the pool.
   showMine?: boolean;
+  // Live Draft: the pick this player sits in range of. The row takes that
+  // pick's colour instead of the plain green, still darker for Loved than
+  // Liked, and an assigned player gets a star in the same colour.
+  pickTint?: string | null;
+  starColor?: string | null;
   onMine?: (row: BoardRowType, value: boolean) => void;
   // When defined, render an "Act" cell (actual historical draft cost for this
   // pos+rank) just left of Tgt. undefined = no Act column at all.
@@ -88,6 +93,8 @@ export function BoardRow({
   showTgt = true,
   showLive = true,
   showMine = false,
+  pickTint = null,
+  starColor = null,
   onMine,
   actCost,
   finish2025,
@@ -124,6 +131,8 @@ export function BoardRow({
   const likelyKeeper = row.likelyKeeper;
   const rowTint = likelyKeeper
     ? "rgba(232, 163, 61, 0.16)"
+    : pickTint
+    ? pickTint
     : row.interest === "love"
     ? "rgba(76, 175, 107, 0.38)"
     : row.interest === "like"
@@ -158,6 +167,16 @@ export function BoardRow({
     </span>
   );
   // Blue tag when this player is pinned to one of your draft slots.
+  // The pick's star: which of your picks you're aiming this player at.
+  const pickStar = starColor ? (
+    <span
+      title={assignedLabel ? `Your target for ${assignedLabel}` : "Targeted"}
+      style={{ color: starColor, fontSize: 11, flexShrink: 0, marginRight: 3 }}
+    >
+      ★
+    </span>
+  ) : null;
+
   const assignedTag = assignedLabel ? (
     <span style={{ color: "#5B9BD5", fontWeight: 600 }} title={`Assigned to ${assignedLabel} on the Targets page`}>
       {" · → "}
@@ -181,7 +200,17 @@ export function BoardRow({
   const dragCol1 = dragEnabled ? styles.stickyDragCol1 : {};
 
   return (
-    <tr data-dragid={row.id} style={{ opacity: dragging ? 0.35 : dimmed ? 0.4 : 1 }}>
+    <tr
+      data-dragid={row.id}
+      // Right-click is the fast path to the same menu the long-press opens.
+      onContextMenu={(e) => {
+        if (!onOpenMenu) return;
+        e.preventDefault();
+        const r = (nameRef.current ?? (e.currentTarget as HTMLElement)).getBoundingClientRect();
+        onOpenMenu(row, { top: r.top, bottom: r.bottom, left: e.clientX });
+      }}
+      style={{ opacity: dragging ? 0.35 : dimmed ? 0.4 : 1 }}
+    >
       <td style={{ ...styles.td, ...styles.tdSticky, ...dragCol1, ...tBreakStyle, ...stickyBg, ...targetGlow }}>
         <span style={{ display: "inline-flex", alignItems: "center" }}>
           {dragEnabled && <DragHandle onPointerDown={onDragStart} dragging={dragging} />}
@@ -221,6 +250,7 @@ export function BoardRow({
           const content = (
             <>
               <div style={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0 }}>
+                {pickStar}
                 <div style={nameStyle}>
                   {row.name}
                   {row.team && <span style={{ color: "#7A828F", fontWeight: 400, fontSize: "0.88em" }}> {row.team}</span>}

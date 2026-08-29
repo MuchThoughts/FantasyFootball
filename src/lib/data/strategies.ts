@@ -34,6 +34,13 @@ export interface Strategy {
    * when you want to steer a position away from what the slots add up to.
    */
   positionBudgets?: Partial<Record<StrategySlot["pos"], number>>;
+  /**
+   * How each pick reacts when the rest of its position spends differently than
+   * planned, keyed by slot id. "up" picks soak up money freed elsewhere, "down"
+   * picks give money back when another pick goes over, "fixed" never moves.
+   * Absent means fixed.
+   */
+  slotFlex?: Record<string, "fixed" | "up" | "down">;
   slots: StrategySlot[];
 }
 

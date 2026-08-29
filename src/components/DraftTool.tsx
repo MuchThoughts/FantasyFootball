@@ -22,6 +22,7 @@ import {
   POSITIONS,
   Pos,
   recommendStrategy,
+  SlotFlex,
   suggestSlotAmount,
   uid,
 } from "@/lib/draftLogic";
@@ -612,6 +613,43 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
     [update]
   );
 
+  // How a pick reacts when the rest of its position spends off-plan.
+  const setSlotFlex = useCallback(
+    (strategyId: string, slotId: string, flex: SlotFlex) => {
+      update((prev) => ({
+        ...prev,
+        strategies: prev.strategies.map((s) => {
+          if (s.id !== strategyId) return s;
+          const slotFlex = { ...(s.slotFlex ?? {}) };
+          if (flex === "fixed") delete slotFlex[slotId];
+          else slotFlex[slotId] = flex;
+          return { ...s, slotFlex };
+        }),
+      }));
+    },
+    [update]
+  );
+
+  // Right-click "mark drafted": someone else took him, at whatever the league
+  // pays for that rank until you type the real number.
+  const setDrafted = useCallback(
+    (row: BoardRowType, drafted: boolean) => {
+      update((prev) => {
+        const next = { ...prev.drafted };
+        if (!drafted) delete next[row.id];
+        else {
+          const cur = next[row.id];
+          next[row.id] = {
+            price: cur && cur.price !== "" && cur.price != null ? cur.price : row.act ?? row.target ?? 1,
+            mine: cur ? cur.mine : false,
+          };
+        }
+        return { ...prev, drafted: next };
+      });
+    },
+    [update]
+  );
+
   const setStrategyName = useCallback(
     (strategyId: string, name: string) => {
       update((prev) => ({ ...prev, strategies: prev.strategies.map((s) => (s.id === strategyId ? { ...s, name } : s)) }));
@@ -1065,6 +1103,8 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
           onMeta={setMeta}
           onRate={setInterest}
           onPositionBudget={setPositionBudget}
+          onSlotAmount={setSlotAmount}
+          onSlotFlex={setSlotFlex}
         />
       )}
 
@@ -1100,6 +1140,34 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
             });
             setSlotMenu(null);
           }}
+          // Draft-night actions, on the Live Draft tab only: the board is for
+          // pre-draft pricing and shouldn't offer to mark players gone.
+          extras={
+            tab === "live"
+              ? (() => {
+                  const row = board.rows.find((r) => r.id === slotMenu.playerId);
+                  if (!row || row.isKeeper) return [];
+                  return [
+                    {
+                      label: row.isDrafted ? "↩ Put back on the board" : "✕ Mark drafted",
+                      color: row.isDrafted ? "#8FCB9E" : "#E1524B",
+                      onClick: () => {
+                        setDrafted(row, !row.isDrafted);
+                        setSlotMenu(null);
+                      },
+                    },
+                    {
+                      label: row.mine ? "↩ Not mine after all" : "✓ I won him",
+                      color: "#4CAF6B",
+                      onClick: () => {
+                        setDraftedMine(row, !row.mine);
+                        setSlotMenu(null);
+                      },
+                    },
+                  ];
+                })()
+              : undefined
+          }
           onClose={() => setSlotMenu(null)}
         />
       )}

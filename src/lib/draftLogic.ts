@@ -672,6 +672,76 @@ export function slotShortlist(
   return [...pinned, ...pool.filter((r) => !taken.has(r.id))].slice(0, limit);
 }
 
+// ── Per-pick budgets with flex ──────────────────────────────────────────────
+//
+// A position's money is split across its picks. Each pick is either fixed, or
+// flexes: "up" picks absorb money freed elsewhere in the position, "down" picks
+// give money up when another pick goes over. Once you buy a player for a pick,
+// that pick costs what you actually paid and the rest re-solve around it.
+
+export type SlotFlex = "fixed" | "up" | "down";
+
+export interface ResolvedSlot {
+  id: string;
+  nominal: number; // what you planned
+  effective: number; // what's actually available now
+  flex: SlotFlex;
+  filled: boolean;
+  spent: number; // what you paid, once filled
+  player: BoardRow | null;
+}
+
+export interface PositionBudget {
+  target: number;
+  spent: number;
+  slots: ResolvedSlot[];
+  // Money no pick can absorb (+) or a shortfall no pick can cover (−). Nonzero
+  // means the position is out of balance and the flex flags can't fix it.
+  unallocated: number;
+}
+
+const FLEX_FLOOR = 1; // a pick never flexes below the minimum bid
+
+export function resolvePositionBudget(
+  target: number,
+  slots: { id: string; nominal: number; flex: SlotFlex; player: BoardRow | null }[]
+): PositionBudget {
+  const resolved: ResolvedSlot[] = slots.map((s) => {
+    const filled = !!s.player;
+    const spent = filled ? Number(s.player!.isKeeper ? s.player!.keeperCost : s.player!.paid) || 0 : 0;
+    return { id: s.id, nominal: s.nominal, effective: filled ? spent : s.nominal, flex: s.flex, filled, spent, player: s.player };
+  });
+
+  const spent = resolved.filter((r) => r.filled).reduce((n, r) => n + r.spent, 0);
+  const open = resolved.filter((r) => !r.filled);
+  const baseline = open.reduce((n, r) => n + r.nominal, 0);
+  let delta = target - spent - baseline;
+  if (delta === 0 || open.length === 0) return { target, spent, slots: resolved, unallocated: delta };
+
+  // Surplus flows into "up" picks; a shortfall is taken out of "down" picks.
+  // Shares are proportional to the planned amounts, so a big pick absorbs more
+  // of the swing than a $1 dart does.
+  const eligible = open.filter((r) => (delta > 0 ? r.flex === "up" : r.flex === "down"));
+  const weightOf = (r: ResolvedSlot) => (delta > 0 ? Math.max(r.nominal, 1) : Math.max(r.nominal - FLEX_FLOOR, 0));
+  const pool = eligible.reduce((n, r) => n + weightOf(r), 0);
+
+  if (pool > 0) {
+    let left = delta;
+    // Whole dollars only, largest share first, so rounding never invents money.
+    const order = [...eligible].sort((a, b) => weightOf(b) - weightOf(a));
+    order.forEach((r, i) => {
+      const w = weightOf(r);
+      const share = i === order.length - 1 ? left : Math.round((delta * w) / pool);
+      const capped = delta > 0 ? share : Math.max(share, FLEX_FLOOR - r.effective);
+      r.effective += capped;
+      left -= capped;
+    });
+    delta = left;
+  }
+
+  return { target, spent, slots: resolved, unallocated: delta };
+}
+
 // Which band each player falls in for the active strategy, considering every
 // open slot price. A player in range of several slots keeps the best standing:
 // Target beats Reach, Reach beats Settle.
