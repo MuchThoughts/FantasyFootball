@@ -1101,6 +1101,7 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
         <LiveDraftTab
           board={board}
           strategy={activeStrategy}
+          budget={d.settings.budget}
           bandByPlayer={bandByPlayer}
           assignments={assignments}
           slotLabels={slotLabels}

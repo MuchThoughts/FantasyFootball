@@ -36,8 +36,13 @@ const FLEX_META: Record<SlotFlex, { icon: string; label: string; title: string }
   fixed: { icon: "=", label: "fixed", title: "Never moves, whatever the rest of the position does" },
   up: { icon: "▲", label: "flex up", title: "Soaks up money freed elsewhere in this position" },
   down: { icon: "▼", label: "flex down", title: "Gives money back when another pick here goes over" },
+  both: {
+    icon: "⇅",
+    label: "flex",
+    title: "Absorbs the swing either way — every other pick here keeps the number you gave it",
+  },
 };
-const FLEX_CYCLE: SlotFlex[] = ["fixed", "up", "down"];
+const FLEX_CYCLE: SlotFlex[] = ["fixed", "up", "down", "both"];
 
 interface PickView {
   id: string;
@@ -54,6 +59,7 @@ interface PickView {
 interface LiveDraftTabProps {
   board: Board;
   strategy: Strategy | undefined;
+  budget: number;
   bandByPlayer: Map<string, Band>;
   assignments: Record<string, string>;
   slotLabels: Map<string, SlotLabel>;
@@ -75,6 +81,7 @@ interface LiveDraftTabProps {
 export function LiveDraftTab({
   board,
   strategy,
+  budget,
   bandByPlayer,
   assignments,
   slotLabels,
@@ -230,18 +237,29 @@ export function LiveDraftTab({
     const delta = next - pk.price;
     if (delta === 0) return;
     const updates: Record<string, number> = { [pk.id]: Math.max(0, pk.nominal + delta) };
-    const donor = cur.picks.find((x) => x.id !== pk.id && !x.filled && x.flex === "up");
+    const donor =
+      cur.picks.find((x) => x.id !== pk.id && !x.filled && x.flex === "up") ??
+      cur.picks.find((x) => x.id !== pk.id && !x.filled && x.flex === "both");
     if (donor) updates[donor.id] = Math.max(1, donor.nominal - delta);
     onSlotAmounts(strategy.id, updates);
   };
 
   const overall = board.myBudgetRemaining;
   const left = cur.target - cur.spent;
+  // Every position's target added up. It should equal the league budget — if it
+  // doesn't, the plan is spending money you don't have (or leaving some idle).
+  const planned = POSITIONS.reduce((n, p) => n + budgets[p].target, 0);
 
   return (
     <div>
       <div style={{ ...styles.panel, padding: "8px 10px", marginBottom: 8 }}>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 14, alignItems: "baseline" }}>
+          <Stat
+            label={planned === budget ? "position targets" : `targets — ${fmtMoney(planned - budget)} vs ${fmtMoney(budget)}`}
+            value={`${fmtMoney(planned)}/${fmtMoney(budget)}`}
+            tone={planned === budget ? "good" : "bad"}
+            big
+          />
           <Stat label="budget left" value={fmtMoney(overall)} tone={overall < 0 ? "bad" : "good"} big />
           <Stat label="spent" value={fmtMoney(board.myBudgetUsed)} />
           <Stat label="roster" value={`${board.myRosterCount}/${board.myRosterCount + board.mySlotsRemaining}`} />
@@ -376,7 +394,14 @@ export function LiveDraftTab({
                       background: "transparent",
                       border: "1px solid #3A3F4A",
                       borderRadius: 4,
-                      color: pk.flex === "up" ? "#4CAF6B" : pk.flex === "down" ? "#E8A33D" : "#5B6270",
+                      color:
+                        pk.flex === "up"
+                          ? "#4CAF6B"
+                          : pk.flex === "down"
+                          ? "#E8A33D"
+                          : pk.flex === "both"
+                          ? "#5B9BD5"
+                          : "#5B6270",
                       fontSize: 9,
                       padding: "1px 5px",
                       cursor: "pointer",

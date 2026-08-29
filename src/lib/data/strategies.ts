@@ -37,10 +37,10 @@ export interface Strategy {
   /**
    * How each pick reacts when the rest of its position spends differently than
    * planned, keyed by slot id. "up" picks soak up money freed elsewhere, "down"
-   * picks give money back when another pick goes over, "fixed" never moves.
-   * Absent means fixed.
+   * picks give money back when another pick goes over, "both" does either, and
+   * "fixed" never moves. Absent means fixed.
    */
-  slotFlex?: Record<string, "fixed" | "up" | "down">;
+  slotFlex?: Record<string, "fixed" | "up" | "down" | "both">;
   slots: StrategySlot[];
 }
 

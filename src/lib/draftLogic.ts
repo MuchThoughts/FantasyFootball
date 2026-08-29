@@ -676,10 +676,12 @@ export function slotShortlist(
 //
 // A position's money is split across its picks. Each pick is either fixed, or
 // flexes: "up" picks absorb money freed elsewhere in the position, "down" picks
-// give money up when another pick goes over. Once you buy a player for a pick,
-// that pick costs what you actually paid and the rest re-solve around it.
+// give money up when another pick goes over, and "both" does either — it lets
+// every other pick hold the number you gave it and takes the swing itself,
+// whichever way it goes. Once you buy a player for a pick, that pick costs what
+// you actually paid and the rest re-solve around it.
 
-export type SlotFlex = "fixed" | "up" | "down";
+export type SlotFlex = "fixed" | "up" | "down" | "both";
 
 export interface ResolvedSlot {
   id: string;
@@ -721,7 +723,9 @@ export function resolvePositionBudget(
   // Surplus flows into "up" picks; a shortfall is taken out of "down" picks.
   // Shares are proportional to the planned amounts, so a big pick absorbs more
   // of the swing than a $1 dart does.
-  const eligible = open.filter((r) => (delta > 0 ? r.flex === "up" : r.flex === "down"));
+  const eligible = open.filter((r) =>
+    r.flex === "both" || (delta > 0 ? r.flex === "up" : r.flex === "down")
+  );
   const weightOf = (r: ResolvedSlot) => (delta > 0 ? Math.max(r.nominal, 1) : Math.max(r.nominal - FLEX_FLOOR, 0));
   const pool = eligible.reduce((n, r) => n + weightOf(r), 0);
 
