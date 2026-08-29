@@ -45,6 +45,7 @@ import { OffensesTab } from "./OffensesTab";
 import { RawCostsTab } from "./RawCostsTab";
 import { NotesTab } from "./NotesTab";
 import { DraftPlanTab } from "./DraftPlanTab";
+import { LiveDraftTab } from "./LiveDraftTab";
 import { TargetsTab } from "./TargetsTab";
 
 const PROFILE_STORAGE_KEY = "ffauction2026:profileId";
@@ -121,7 +122,7 @@ interface DraftToolProps {
 function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: DraftToolProps) {
   const { data, update, loaded, saveState } = useDraftState(profileId);
 
-  const [tab, setTab] = useState<"board" | "targets" | "plan" | "rankings" | "drafters" | "offenses" | "rawcosts" | "notes">(
+  const [tab, setTab] = useState<"board" | "targets" | "plan" | "live" | "rankings" | "drafters" | "offenses" | "rawcosts" | "notes">(
     "board"
   );
   const [posFilter, setPosFilter] = useState("ALL");
@@ -579,6 +580,38 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
     [update]
   );
 
+  // Per-position spending target on the Live Draft tab. Clearing it falls back
+  // to the sum of that position's slot prices.
+  const setPositionBudget = useCallback(
+    (strategyId: string, pos: Pos, value: string) => {
+      update((prev) => ({
+        ...prev,
+        strategies: prev.strategies.map((s) => {
+          if (s.id !== strategyId) return s;
+          const positionBudgets = { ...(s.positionBudgets ?? {}) };
+          const n = Number(value);
+          if (value.trim() === "" || !Number.isFinite(n) || n < 0) delete positionBudgets[pos];
+          else positionBudgets[pos] = Math.round(n);
+          return { ...s, positionBudgets };
+        }),
+      }));
+    },
+    [update]
+  );
+
+  // "I won him" on the Live Draft tab. A player has to have a price before the
+  // claim means anything, so claiming seeds one from what the league pays.
+  const setDraftedMine = useCallback(
+    (row: BoardRowType, value: boolean) => {
+      update((prev) => {
+        const cur = prev.drafted[row.id];
+        const price = cur && cur.price !== "" && cur.price != null ? cur.price : row.act ?? row.target ?? 1;
+        return { ...prev, drafted: { ...prev.drafted, [row.id]: { price, mine: value } } };
+      });
+    },
+    [update]
+  );
+
   const setStrategyName = useCallback(
     (strategyId: string, name: string) => {
       update((prev) => ({ ...prev, strategies: prev.strategies.map((s) => (s.id === strategyId ? { ...s, name } : s)) }));
@@ -708,6 +741,9 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
         </button>
         <button style={tab === "plan" ? styles.tabActive : styles.tab} onClick={() => setTab("plan")}>
           Draft Plan
+        </button>
+        <button style={tab === "live" ? styles.tabActive : styles.tab} onClick={() => setTab("live")}>
+          Live Draft
         </button>
         <button style={tab === "rankings" ? styles.tabActive : styles.tab} onClick={() => setTab("rankings")}>
           Rankings
@@ -1003,6 +1039,32 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
           onMeta={setMeta}
           onSlotAmount={setSlotAmount}
           onSlotPicks={setSlotPicks}
+        />
+      )}
+
+      {tab === "live" && (
+        <LiveDraftTab
+          board={board}
+          strategy={activeStrategy}
+          bandByPlayer={bandByPlayer}
+          assignments={assignments}
+          slotLabels={slotLabels}
+          onOpenMenu={(r, rect) =>
+            setSlotMenu({
+              playerId: r.id,
+              playerName: r.name,
+              pos: r.pos,
+              disliked: r.interest === "dislike",
+              assignedSlotId: assignments[r.id] ?? null,
+              hasNote: !!d.notes?.[r.id],
+              rect,
+            })
+          }
+          onPaid={setPaid}
+          onMine={setDraftedMine}
+          onMeta={setMeta}
+          onRate={setInterest}
+          onPositionBudget={setPositionBudget}
         />
       )}
 

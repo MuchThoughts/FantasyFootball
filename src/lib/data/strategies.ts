@@ -28,6 +28,12 @@ export interface Strategy {
    * yet", and that tab falls back to suggesting the top of the shortlist.
    */
   slotPicks?: Record<string, string[]>;
+  /**
+   * Per-position spending target for the Live Draft tab. Absent means "use the
+   * sum of this position's slots", which is the honest default — set one only
+   * when you want to steer a position away from what the slots add up to.
+   */
+  positionBudgets?: Partial<Record<StrategySlot["pos"], number>>;
   slots: StrategySlot[];
 }
 

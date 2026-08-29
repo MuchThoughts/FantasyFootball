@@ -47,6 +47,10 @@ interface BoardRowProps {
   showPaid?: boolean; // default true
   showTgt?: boolean; // default true
   showLive?: boolean; // default true
+  // Live-draft only: mark a bought player as yours, so he counts against your
+  // budget rather than just leaving the pool.
+  showMine?: boolean;
+  onMine?: (row: BoardRowType, value: boolean) => void;
   // When defined, render an "Act" cell (actual historical draft cost for this
   // pos+rank) just left of Tgt. undefined = no Act column at all.
   actCost?: number | null;
@@ -83,6 +87,8 @@ export function BoardRow({
   showPaid = true,
   showTgt = true,
   showLive = true,
+  showMine = false,
+  onMine,
   actCost,
   finish2025,
   pts2025,
@@ -338,10 +344,36 @@ export function BoardRow({
               onChange={(e) => onPaid(row, e.target.value)}
               onFocus={(e) => {
                 const el = e.target as HTMLInputElement;
-                if (row.paid === "" && row.target != null) onPaid(row, String(row.target));
+                const seed = row.act ?? row.target;
+                if (row.paid === "" && seed != null) onPaid(row, String(seed));
                 requestAnimationFrame(() => el.select());
               }}
             />
+          )}
+        </td>
+      )}
+      {showMine && (
+        <td style={{ ...styles.td, ...tBreakStyle, ...bgStyle, padding: "2px 4px" }}>
+          {row.isKeeper ? (
+            <span style={{ fontSize: 10, color: "#8B92A0" }}>{row.mine ? "you" : "—"}</span>
+          ) : (
+            <button
+              onClick={() => onMine?.(row, !row.mine)}
+              title={row.mine ? "On your roster — click to unclaim" : "Claim: count this buy against your budget"}
+              style={{
+                background: row.mine ? "#2E7D46" : "transparent",
+                border: `1px solid ${row.mine ? "#2E7D46" : "#3A3F4A"}`,
+                borderRadius: 4,
+                color: row.mine ? "#EDEEF0" : "#5B6270",
+                fontSize: 9,
+                fontWeight: 700,
+                padding: "2px 5px",
+                cursor: "pointer",
+                lineHeight: 1.2,
+              }}
+            >
+              ME
+            </button>
           )}
         </td>
       )}
