@@ -787,7 +787,7 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
         </div>
       )}
 
-      <div style={styles.tabs}>
+      <div className="no-scrollbar" style={styles.tabs}>
         <button style={tab === "board" ? styles.tabActive : styles.tab} onClick={() => setTab("board")}>
           Board
         </button>

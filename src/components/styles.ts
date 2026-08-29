@@ -22,7 +22,10 @@ export const styles: Record<string, CSSProperties> = {
     color: "#EDEEF0",
     minHeight: "100vh",
     padding: "16px 14px 40px",
-    maxWidth: 720,
+    // Wide enough that the tab bar (~700px) never needs to scroll on a desktop,
+    // with room for more tabs. Phones are narrower than this anyway, so it only
+    // affects the desktop layout.
+    maxWidth: 940,
     margin: "0 auto",
     boxSizing: "border-box",
   },
