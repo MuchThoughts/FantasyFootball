@@ -60,10 +60,11 @@ interface LiveDraftTabProps {
   onOpenMenu: (row: BoardRowType, rect: SlotMenuState["rect"]) => void;
   onPaid: (row: BoardRowType, value: string) => void;
   onMine: (row: BoardRowType, value: boolean) => void;
+  onDrafted: (row: BoardRowType, value: boolean) => void;
   onMeta: (id: string, field: "max", value: string) => void;
   onRate: (row: BoardRowType, value: Interest) => void;
   onPositionBudget: (strategyId: string, pos: Pos, value: string) => void;
-  onSlotAmount: (strategyId: string, slotId: string, value: string) => void;
+  onSlotAmounts: (strategyId: string, updates: Record<string, number>) => void;
   onSlotFlex: (strategyId: string, slotId: string, flex: SlotFlex) => void;
 }
 
@@ -80,16 +81,21 @@ export function LiveDraftTab({
   onOpenMenu,
   onPaid,
   onMine,
+  onDrafted,
   onMeta,
   onRate,
   onPositionBudget,
-  onSlotAmount,
+  onSlotAmounts,
   onSlotFlex,
 }: LiveDraftTabProps) {
   const [pos, setPos] = useState<Pos>("QB");
   const [showNeutral, setShowNeutral] = useState(false);
   const [showDisliked, setShowDisliked] = useState(false);
-  const [hideGone, setHideGone] = useState(false);
+  // Drafted players fall off the list; the toggle brings them back.
+  const [showDrafted, setShowDrafted] = useState(false);
+  // Paid/Mine only appear for the row you right-clicked — the table stays a
+  // reading surface until you actually need to record something.
+  const [revealed, setRevealed] = useState<string | null>(null);
 
   const budgets = useMemo(() => {
     const out = {} as Record<Pos, PositionBudget & { picks: PickView[] }>;
@@ -195,20 +201,39 @@ export function LiveDraftTab({
     const all = board.rows.filter((r) => r.pos === pos);
     return all.filter((r) => {
       if (r.mine) return true;
-      if (hideGone && (r.isDrafted || r.isKeeper)) return false;
+      // The row you're working on stays put: typing what a player went for
+      // marks him drafted, and he'd otherwise vanish before you could claim him.
+      if (r.id === revealed) return true;
+      if ((r.isDrafted || r.isKeeper) && !showDrafted) return false;
       if (r.interest === "love" || r.interest === "like") return true;
       if (r.interest === "dislike") return showDisliked;
       return showNeutral;
     });
-  }, [board.rows, pos, showNeutral, showDisliked, hideGone]);
+  }, [board.rows, pos, showNeutral, showDisliked, showDrafted, revealed]);
 
   const hiddenCount = useMemo(() => {
     const all = board.rows.filter((r) => r.pos === pos && !r.mine);
     return {
-      neutral: all.filter((r) => r.interest === "neutral").length,
-      disliked: all.filter((r) => r.interest === "dislike").length,
+      neutral: all.filter((r) => r.interest === "neutral" && !r.isDrafted && !r.isKeeper).length,
+      disliked: all.filter((r) => r.interest === "dislike" && !r.isDrafted && !r.isKeeper).length,
+      drafted: all.filter((r) => r.isDrafted || r.isKeeper).length,
     };
   }, [board.rows, pos]);
+
+  // Repricing a pick keeps the position whole: whatever you add to one pick is
+  // taken off a flex-up pick in the same position, and vice versa. With no
+  // flex-up pick to balance against, the position simply ends up with money
+  // unallocated — which the panel then shows in red.
+  const repricePick = (pk: PickView, typed: string) => {
+    if (!strategy) return;
+    const next = Math.max(0, Math.round(Number(typed) || 0));
+    const delta = next - pk.price;
+    if (delta === 0) return;
+    const updates: Record<string, number> = { [pk.id]: Math.max(0, pk.nominal + delta) };
+    const donor = cur.picks.find((x) => x.id !== pk.id && !x.filled && x.flex === "up");
+    if (donor) updates[donor.id] = Math.max(1, donor.nominal - delta);
+    onSlotAmounts(strategy.id, updates);
+  };
 
   const overall = board.myBudgetRemaining;
   const left = cur.target - cur.spent;
@@ -241,13 +266,37 @@ export function LiveDraftTab({
         </div>
       </div>
 
-      <div style={styles.chipRow}>
-        {POSITIONS.map((p) => (
-          <button key={p} style={pos === p ? { ...styles.chip, ...chipActive(p) } : styles.chip} onClick={() => setPos(p)}>
-            {p}
-            <span style={{ fontSize: 9, color: "#5B6270" }}> {budgets[p].slots.filter((s) => s.filled).length}</span>
-          </button>
-        ))}
+      <div style={{ display: "flex", gap: 6, marginBottom: 8, flexWrap: "wrap" }}>
+        {POSITIONS.map((p) => {
+          const v = budgets[p];
+          const on = pos === p;
+          const done = v.slots.filter((s) => s.filled).length;
+          return (
+            <button
+              key={p}
+              onClick={() => setPos(p)}
+              title={`${p}: ${fmtMoney(v.target)} across ${v.slots.length} pick${v.slots.length === 1 ? "" : "s"}`}
+              style={{
+                flex: "1 1 96px",
+                background: on ? `${POS_COLOR[p]}22` : "#1C2128",
+                border: `1px solid ${on ? POS_COLOR[p] : "#2A2F38"}`,
+                borderRadius: 8,
+                padding: "7px 8px",
+                cursor: "pointer",
+                textAlign: "center",
+                lineHeight: 1.25,
+              }}
+            >
+              <div style={{ fontSize: 14, fontWeight: 800, color: on ? POS_COLOR[p] : "#C6CAD2", letterSpacing: 0.5 }}>{p}</div>
+              <div style={{ ...styles.tdMono, fontSize: 12, fontWeight: 700, color: on ? "#EDEEF0" : "#8B92A0" }}>
+                {fmtMoney(v.target)}
+              </div>
+              <div style={{ fontSize: 9, color: "#5B6270" }}>
+                {done}/{v.slots.length} picks
+              </div>
+            </button>
+          );
+        })}
       </div>
 
       {/* The position's money, and how it splits across the picks */}
@@ -269,16 +318,16 @@ export function LiveDraftTab({
           <Stat label="left" value={fmtMoney(left)} tone={left < 0 ? "bad" : "good"} big />
           {cur.unallocated !== 0 && (
             <span
-              style={{ fontSize: 10, color: cur.unallocated > 0 ? "#E8A33D" : "#E1524B" }}
+              style={{ ...styles.tdMono, fontSize: 12, fontWeight: 700, color: "#E1524B" }}
               title={
                 cur.unallocated > 0
-                  ? "No open pick here is set to flex up, so this money has nowhere to go"
-                  : "No open pick here can give up enough, so the position is over its target"
+                  ? "This much of the position budget isn't on any pick. Raise a pick, or set one to flex up so it lands somewhere."
+                  : "The picks here add up to more than the position budget."
               }
             >
               {cur.unallocated > 0
-                ? `${fmtMoney(cur.unallocated)} spare — no pick flexes up`
-                : `${fmtMoney(-cur.unallocated)} over — nothing left to take`}
+                ? `${fmtMoney(cur.unallocated)} unallocated`
+                : `${fmtMoney(-cur.unallocated)} over budget`}
             </span>
           )}
         </div>
@@ -307,7 +356,7 @@ export function LiveDraftTab({
               ) : (
                 <>
                   <span style={{ fontSize: 11, color: "#5B6270" }}>$</span>
-                  <PriceInput value={pk.price} onCommit={(v) => strategy && onSlotAmount(strategy.id, pk.id, v)} />
+                  <PriceInput value={pk.price} onCommit={(v) => repricePick(pk, v)} />
                   {pk.price !== pk.nominal && (
                     <span
                       style={{ ...styles.tdMono, fontSize: 9.5, color: pk.price > pk.nominal ? "#4CAF6B" : "#E1524B" }}
@@ -349,16 +398,16 @@ export function LiveDraftTab({
         <button style={showDisliked ? { ...styles.chip, ...chipActive("ALL") } : styles.chip} onClick={() => setShowDisliked((v) => !v)}>
           {showDisliked ? "✓" : "+"} Disliked <span style={{ fontSize: 9, color: "#5B6270" }}>{hiddenCount.disliked}</span>
         </button>
-        <button style={hideGone ? { ...styles.chip, ...chipActive("ALL") } : styles.chip} onClick={() => setHideGone((v) => !v)}>
-          {hideGone ? "✓" : "+"} Hide gone
+        <button style={showDrafted ? { ...styles.chip, ...chipActive("ALL") } : styles.chip} onClick={() => setShowDrafted((v) => !v)}>
+          {showDrafted ? "✓" : "+"} Drafted <span style={{ fontSize: 9, color: "#5B6270" }}>{hiddenCount.drafted}</span>
         </button>
       </div>
 
       <div style={{ fontSize: 10.5, color: "#5B6270", marginBottom: 8 }}>
-        Rows are shaded by the pick they&apos;re priced for — darker for Loved than Liked. Right-click a player to mark
-        him drafted or make him your ★ target for a pick. Type what he went for in{" "}
-        <b style={{ color: "#8B92A0" }}>Paid</b>, then hit <b style={{ color: "#8B92A0" }}>ME</b> if you won him, and the
-        other picks re-solve around it.
+        Rows are shaded by the pick they&apos;re priced for — darker for Loved than Liked.{" "}
+        <b style={{ color: "#8B92A0" }}>Press and hold 3s</b> to strike a player off as drafted.{" "}
+        <b style={{ color: "#8B92A0" }}>Right-click</b> for the menu, which also opens that row&apos;s Paid and Mine boxes
+        — type what he went for, hit ME if you won him, and the other picks re-solve around it.
       </div>
 
       {rows.length === 0 ? (
@@ -385,12 +434,16 @@ export function LiveDraftTab({
                 <th style={styles.th} title="The most you're willing to pay">
                   Max
                 </th>
-                <th style={styles.th} title="What he actually went for tonight">
-                  Paid
-                </th>
-                <th style={styles.th} title="Did you win him?">
-                  Mine
-                </th>
+                {revealed && (
+                  <>
+                    <th style={styles.th} title="What he actually went for tonight">
+                      Paid
+                    </th>
+                    <th style={styles.th} title="Did you win him?">
+                      Mine
+                    </th>
+                  </>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -412,15 +465,20 @@ export function LiveDraftTab({
                     showPos={false}
                     showTgt={false}
                     showLive={false}
-                    showPaid
-                    showMine
+                    showPaid={revealed === row.id}
+                    showMine={revealed === row.id}
+                    holdMs={3000}
+                    onHoldAction={(r) => onDrafted(r, !r.isDrafted)}
                     pickTint={pick ? tintFor(pick.color, row.interest) : null}
                     starColor={assignedPick?.color ?? null}
                     actCost={rawCostAt(row.pos, row.effRank)}
                     finish2025={FINISH_2025[row.id] ?? null}
                     pts2025={points2025ForFinish(FINISH_2025[row.id])}
                     assignedLabel={assignments[row.id] ? slotLabels.get(assignments[row.id])?.label ?? null : null}
-                    onOpenMenu={onOpenMenu}
+                    onOpenMenu={(r, rect) => {
+                      setRevealed(r.id);
+                      onOpenMenu(r, rect);
+                    }}
                     onPaid={onPaid}
                     onMine={onMine}
                     onMeta={onMeta}

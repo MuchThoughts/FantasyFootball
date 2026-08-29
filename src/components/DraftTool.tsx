@@ -613,6 +613,23 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
     [update]
   );
 
+  // Reprice several picks at once. Editing one pick on the Live Draft tab moves
+  // the difference to a flex-up pick in the same position, and both writes have
+  // to land in one update or the second would be computed from stale state.
+  const setSlotAmounts = useCallback(
+    (strategyId: string, updates: Record<string, number>) => {
+      update((prev) => ({
+        ...prev,
+        strategies: prev.strategies.map((s) =>
+          s.id === strategyId
+            ? { ...s, slots: s.slots.map((sl) => (sl.id in updates ? { ...sl, amount: updates[sl.id] } : sl)) }
+            : s
+        ),
+      }));
+    },
+    [update]
+  );
+
   // How a pick reacts when the rest of its position spends off-plan.
   const setSlotFlex = useCallback(
     (strategyId: string, slotId: string, flex: SlotFlex) => {
@@ -1100,10 +1117,11 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
           }
           onPaid={setPaid}
           onMine={setDraftedMine}
+          onDrafted={setDrafted}
           onMeta={setMeta}
           onRate={setInterest}
           onPositionBudget={setPositionBudget}
-          onSlotAmount={setSlotAmount}
+          onSlotAmounts={setSlotAmounts}
           onSlotFlex={setSlotFlex}
         />
       )}

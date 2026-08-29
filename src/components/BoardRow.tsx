@@ -55,6 +55,10 @@ interface BoardRowProps {
   // Liked, and an assigned player gets a star in the same colour.
   pickTint?: string | null;
   starColor?: string | null;
+  // Replaces the default press-and-hold (open the menu). Live Draft uses a
+  // deliberate 3s hold to strike a player off as drafted.
+  onHoldAction?: (row: BoardRowType) => void;
+  holdMs?: number;
   onMine?: (row: BoardRowType, value: boolean) => void;
   // When defined, render an "Act" cell (actual historical draft cost for this
   // pos+rank) just left of Tgt. undefined = no Act column at all.
@@ -95,6 +99,8 @@ export function BoardRow({
   showMine = false,
   pickTint = null,
   starColor = null,
+  onHoldAction,
+  holdMs,
   onMine,
   actCost,
   finish2025,
@@ -108,7 +114,9 @@ export function BoardRow({
 }: BoardRowProps) {
   const nameRef = useRef<HTMLDivElement>(null);
   const hasNote = !!note && note.trim().length > 0;
-  const onHold = onOpenMenu
+  const onHold = onHoldAction
+    ? () => onHoldAction(row)
+    : onOpenMenu
     ? () => {
         const el = nameRef.current;
         if (el) {
@@ -117,7 +125,7 @@ export function BoardRow({
         }
       }
     : undefined;
-  const { pressing, handlers } = usePlayerRating(row.interest, (v) => onRate(row, v), onHold);
+  const { pressing, handlers } = usePlayerRating(row.interest, (v) => onRate(row, v), onHold, holdMs);
   const nameClickable = !row.isKeeper && !row.isDrafted && !row.mine;
   // Team rides along in the same line, so it counts toward the fit and scales with it.
   const nameStyle = { ...styles.tdPlayerName, fontSize: nameFontSize(row.name, row.team) };
@@ -206,6 +214,9 @@ export function BoardRow({
       onContextMenu={(e) => {
         if (!onOpenMenu) return;
         e.preventDefault();
+        // A touch long-press fires contextmenu at ~500ms; cancel the press so a
+        // 3s hold doesn't also fire on top of the menu it just opened.
+        handlers.onPointerCancel();
         const r = (nameRef.current ?? (e.currentTarget as HTMLElement)).getBoundingClientRect();
         onOpenMenu(row, { top: r.top, bottom: r.bottom, left: e.clientX });
       }}

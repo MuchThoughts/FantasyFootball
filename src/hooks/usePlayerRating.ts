@@ -10,9 +10,16 @@ const CLICK_DELAY_MS = 260; // window to distinguish a single click from a doubl
 //   click        -> Like  (click again while Liked -> back to Neutral)
 //   double-click -> Love  (again while Loved       -> back to Neutral)
 //   press & hold -> onHold() (opens the assign/dislike menu); if no onHold is
-//                   given it falls back to toggling Dislike.
+//                   given it falls back to toggling Dislike. holdMs lets a
+//                   caller demand a longer, deliberate hold — the Live Draft
+//                   tab uses 3s for "he's gone", which you don't want on a slip.
 // Each click gesture toggles, so the same action undoes itself.
-export function usePlayerRating(interest: Interest, onRate: (value: Interest) => void, onHold?: () => void) {
+export function usePlayerRating(
+  interest: Interest,
+  onRate: (value: Interest) => void,
+  onHold?: () => void,
+  holdMs: number = LONG_PRESS_MS
+) {
   const [pressing, setPressing] = useState(false);
   const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -33,7 +40,7 @@ export function usePlayerRating(interest: Interest, onRate: (value: Interest) =>
       setPressing(false);
       if (onHold) onHold();
       else onRate(interest === "dislike" ? "neutral" : "dislike");
-    }, LONG_PRESS_MS);
+    }, holdMs);
   };
 
   const endPress = () => {
