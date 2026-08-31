@@ -24,13 +24,25 @@ import { PriceInput } from "./PriceInput";
 import { SlotMenuState } from "./SlotMenu";
 import { styles, chipActive } from "./styles";
 
-// One colour per pick within a position, in price order. Distinct enough to tell
-// apart as a row background at low alpha and as a star at full strength.
+// One colour per pick within a position, dearest first — the same order the
+// slot labels are numbered in, so QB1 always wears the first colour. Distinct
+// enough to tell apart as a row background at low alpha and as a star at full
+// strength.
 const PICK_COLORS = ["#5B9BD5", "#E8A33D", "#C77DD2", "#4CAF6B", "#D2695B", "#7E8CE0", "#59B3B0", "#B48A4A"];
 
-// How far either side of a pick's price its shading reaches, counted in players
-// you've rated — 4 dearer, anyone at the price, 4 cheaper.
-const WINDOW = 4;
+// How far either side of a pick's price the shading reaches, as a share of that
+// price. Proportional rather than a flat count of players, so the window slides
+// smoothly as the price moves instead of stepping a name at a time — and so a
+// $60 pick sweeps a genuinely wide range while an $8 pick stays tight.
+const SPAN = 0.25;
+// Sparse stretches of the board still get a window; crowded ones don't run away.
+const MIN_EACH = 2;
+const MAX_EACH = 6;
+
+// Two picks priced within this of each other are really the same shopping trip.
+// They share one colour and one pool instead of splitting near-identical players
+// between them on a coin-flip.
+const mergeTolerance = (price: number) => Math.max(2, price * 0.15);
 
 const FLEX_META: Record<SlotFlex, { icon: string; label: string; title: string }> = {
   fixed: { icon: "=", label: "fixed", title: "Never moves, whatever the rest of the position does" },
@@ -54,6 +66,16 @@ interface PickView {
   filled: boolean;
   spent: number;
   player: BoardRowType | null;
+}
+
+// One shaded band: usually a single pick, but picks that land close in price
+// collapse into one so they share a colour and a pool of players.
+interface PickBand {
+  key: string;
+  label: string;
+  color: string;
+  price: number;
+  ids: string[];
 }
 
 interface LiveDraftTabProps {
@@ -147,6 +169,8 @@ export function LiveDraftTab({
         }))
       );
 
+      // Listed and coloured dearest first, which is the same order the labels
+      // are numbered in — so QB1 is always the first colour, QB2 the second.
       const picks: PickView[] = resolved.slots
         .map((r) => ({
           id: r.id,
@@ -181,28 +205,51 @@ export function LiveDraftTab({
     [board.rows, pos]
   );
 
-  // playerId -> the pick whose window he sits in. Windows overlap where picks
-  // are close in price, so the nearest pick wins and ties go to the dearer one.
+  // The open picks collapsed into bands: anything priced close enough to its
+  // neighbour to be shopping in the same aisle becomes one band. Rebuilt from
+  // the live prices, so it re-forms and re-splits as the draft moves them.
+  const bands = useMemo(() => {
+    const open = [...cur.picks].filter((p) => !p.filled).sort((a, b) => b.price - a.price);
+    const out: (PickBand & { lo: number; sum: number })[] = [];
+    for (const pk of open) {
+      const last = out[out.length - 1];
+      if (last && last.lo - pk.price <= mergeTolerance(pk.price)) {
+        last.ids.push(pk.id);
+        last.lo = pk.price;
+        last.sum += pk.price;
+        last.price = last.sum / last.ids.length;
+        last.label = `${last.label.split("–")[0]}–${pk.label}`;
+        continue;
+      }
+      // The dearest pick in a band names it and gives it its colour.
+      out.push({ key: pk.id, label: pk.label, color: pk.color, price: pk.price, ids: [pk.id], lo: pk.price, sum: pk.price });
+    }
+    return out as PickBand[];
+  }, [cur.picks]);
+
+  const bandByPick = useMemo(() => {
+    const out = new Map<string, PickBand>();
+    for (const b of bands) for (const id of b.ids) out.set(id, b);
+    return out;
+  }, [bands]);
+
+  // playerId -> the band whose price window he sits in. Windows overlap where
+  // bands are near each other, so the nearest price wins and ties go dearer.
   const pickByPlayer = useMemo(() => {
-    const out = new Map<string, PickView>();
+    const out = new Map<string, PickBand>();
     const best = new Map<string, number>();
-    for (const pick of cur.picks) {
-      if (pick.filled) continue;
-      const price = pick.price;
-      const dearer = ratedLadder.filter((r) => (r.act ?? 0) > price).slice(-WINDOW);
-      const exact = ratedLadder.filter((r) => (r.act ?? 0) === price);
-      const cheaper = ratedLadder.filter((r) => (r.act ?? 0) < price).slice(0, WINDOW);
-      for (const r of [...dearer, ...exact, ...cheaper]) {
-        const d = Math.abs((r.act ?? 0) - price);
+    for (const band of bands) {
+      for (const r of windowAround(ratedLadder, band.price)) {
+        const d = Math.abs((r.act ?? 0) - band.price);
         const prior = best.get(r.id);
         if (prior === undefined || d < prior) {
           best.set(r.id, d);
-          out.set(r.id, pick);
+          out.set(r.id, band);
         }
       }
     }
     return out;
-  }, [cur.picks, ratedLadder]);
+  }, [bands, ratedLadder]);
 
   const rows = useMemo(() => {
     const all = board.rows.filter((r) => r.pos === pos);
@@ -351,21 +398,28 @@ export function LiveDraftTab({
         </div>
 
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-          {cur.picks.map((pk) => (
+          {cur.picks.map((pk) => {
+            const band = bandByPick.get(pk.id);
+            // A merged pick wears its band's colour, not its own, so the pills
+            // say at a glance which picks are fishing in the same pool.
+            const hue = band?.color ?? pk.color;
+            const shared = (band?.ids.length ?? 1) > 1;
+            return (
             <div
               key={pk.id}
+              title={shared ? `Shares a shortlist with ${band!.label} — they're priced too close to separate` : undefined}
               style={{
                 display: "inline-flex",
                 alignItems: "center",
                 gap: 5,
                 background: pk.filled ? "rgba(76,175,107,0.10)" : "#1C2128",
-                border: `1px solid ${pk.filled ? "#2E7D46" : pk.color}`,
+                border: `1px solid ${pk.filled ? "#2E7D46" : hue}`,
                 borderRadius: 6,
                 padding: "3px 7px",
                 opacity: pk.filled ? 0.75 : 1,
               }}
             >
-              <span style={{ color: pk.color, fontSize: 11 }}>★</span>
+              <span style={{ color: hue, fontSize: 11 }}>{shared ? "☆" : "★"}</span>
               <span style={{ fontSize: 11, fontWeight: 600, color: "#C6CAD2" }}>{pk.label}</span>
               {pk.filled ? (
                 <span style={{ ...styles.tdMono, fontSize: 11, color: "#8FCB9E" }}>
@@ -412,7 +466,8 @@ export function LiveDraftTab({
                 </>
               )}
             </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
@@ -429,7 +484,9 @@ export function LiveDraftTab({
       </div>
 
       <div style={{ fontSize: 10.5, color: "#5B6270", marginBottom: 8 }}>
-        Rows are shaded by the pick they&apos;re priced for — darker for Loved than Liked.{" "}
+        Rows are shaded by the pick they&apos;re priced for — darker for Loved than Liked. The shading tracks the
+        prices live, so it slides as picks are repriced or flexed; picks that end up close in price share one colour
+        and one shortlist (☆).{" "}
         <b style={{ color: "#8B92A0" }}>Press and hold 3s</b> to strike a player off as drafted.{" "}
         <b style={{ color: "#8B92A0" }}>Right-click</b> for the menu, which also opens that row&apos;s Paid and Mine boxes
         — type what he went for, hit ME if you won him, and the other picks re-solve around it.
@@ -475,6 +532,11 @@ export function LiveDraftTab({
               {rows.map((row) => {
                 const pick = pickByPlayer.get(row.id);
                 const assignedPick = cur.picks.find((p) => p.id === assignments[row.id]);
+                // Match the star to the band the pick currently sits in, so a
+                // star and the shading around it never disagree.
+                const starHue = assignedPick
+                  ? bandByPick.get(assignedPick.id)?.color ?? assignedPick.color
+                  : null;
                 return (
                   <BoardRow
                     key={row.id}
@@ -495,7 +557,7 @@ export function LiveDraftTab({
                     holdMs={3000}
                     onHoldAction={(r) => onDrafted(r, !r.isDrafted)}
                     pickTint={pick ? tintFor(pick.color, row.interest) : null}
-                    starColor={assignedPick?.color ?? null}
+                    starColor={starHue}
                     actCost={rawCostAt(row.pos, row.effRank)}
                     finish2025={FINISH_2025[row.id] ?? null}
                     pts2025={points2025ForFinish(FINISH_2025[row.id])}
@@ -520,6 +582,29 @@ export function LiveDraftTab({
 }
 
 const noop = () => {};
+
+// Everyone on the ladder priced within a proportional band of `price`. Widened
+// when the band lands somewhere sparse, trimmed when it lands somewhere
+// crowded, and never cutting a price in half — players who cost the same are
+// always in or out together, so two $20 players can't end up different colours.
+function windowAround(ladder: BoardRowType[], price: number): BoardRowType[] {
+  const span = Math.max(2, price * SPAN);
+  // The ladder runs dearest first, so the cheaper side is already nearest-first
+  // and the dearer side needs reversing.
+  const dearer = ladder.filter((r) => (r.act ?? 0) > price).reverse();
+  const exact = ladder.filter((r) => (r.act ?? 0) === price);
+  const cheaper = ladder.filter((r) => (r.act ?? 0) < price);
+  return [...nearest(dearer, price, span), ...exact, ...nearest(cheaper, price, span)];
+}
+
+function nearest(nearestFirst: BoardRowType[], price: number, span: number): BoardRowType[] {
+  const at = (i: number) => nearestFirst[i]?.act ?? 0;
+  let n = 0;
+  while (n < nearestFirst.length && Math.abs(at(n) - price) <= span) n++;
+  n = Math.min(Math.max(n, MIN_EACH), MAX_EACH, nearestFirst.length);
+  while (n > 0 && n < nearestFirst.length && at(n) === at(n - 1)) n++;
+  return nearestFirst.slice(0, n);
+}
 
 // The pick's colour at love/like strength — same hue, darker for the players you
 // actually want.
