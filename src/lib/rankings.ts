@@ -1,4 +1,5 @@
 import { Player } from "./data/players";
+import { DS_SUPERFLEX_RANKS, DS_SUPERFLEX_SOURCE_ID, DS_SUPERFLEX_SOURCE_NAME, DS_SUPERFLEX_TIERS } from "./data/dsSuperflexEcr";
 import { FP_SUPERFLEX_ECR, FP_SUPERFLEX_SOURCE_ID, FP_SUPERFLEX_SOURCE_NAME } from "./data/fpSuperflexEcr";
 import { uid } from "./draftLogic";
 
@@ -51,14 +52,21 @@ export function builtinRanks(players: Player[]): Record<string, number> {
   return ranks;
 }
 
-// All selectable sources: the two shipped ones first, then uploads in creation
-// order. Both shipped sources are virtual — computed or compiled in, never
-// stored in the profile — so they cost nothing in saved state and stay
-// available to every profile.
+// All selectable sources: the shipped ones first, then uploads in creation
+// order. Shipped sources are virtual — computed or compiled in, never stored in
+// the profile — so they cost nothing in saved state and stay available to every
+// profile.
 export function allSources(players: Player[], uploaded: RankingSource[]): RankingSource[] {
   return [
     { id: BUILTIN_SOURCE_ID, name: BUILTIN_SOURCE_NAME, createdAt: "", ranks: builtinRanks(players) },
     { id: FP_SUPERFLEX_SOURCE_ID, name: FP_SUPERFLEX_SOURCE_NAME, createdAt: "", ranks: FP_SUPERFLEX_ECR },
+    {
+      id: DS_SUPERFLEX_SOURCE_ID,
+      name: DS_SUPERFLEX_SOURCE_NAME,
+      createdAt: "",
+      ranks: DS_SUPERFLEX_RANKS,
+      tiers: DS_SUPERFLEX_TIERS,
+    },
     ...uploaded,
   ];
 }

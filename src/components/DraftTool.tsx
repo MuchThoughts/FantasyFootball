@@ -184,13 +184,14 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
   // the built-in defaults) are the only keeper designation in the app.
   const keepers = useMemo(() => expectedKeepers(d.keeperPicks), [d.keeperPicks]);
 
-  // Tiers from the active uploaded ranking (a single source with a tier column);
-  // absent for the built-in list or blends, where tiers stay strategy-derived.
+  // Tiers from the active ranking when it carries its own (an upload with a tier
+  // column, or a shipped source that publishes tiers). Absent for the built-in
+  // list and for blends, where tiers stay strategy-derived.
   const sourceTiers = useMemo(() => {
     if (d.ranking.mode !== "source" || d.ranking.activeSourceId === BUILTIN_SOURCE_ID) return undefined;
-    const src = d.rankingSources.find((s) => s.id === d.ranking.activeSourceId);
+    const src = allSources(basePlayers, d.rankingSources).find((s) => s.id === d.ranking.activeSourceId);
     return src?.tiers && Object.keys(src.tiers).length > 0 ? src.tiers : undefined;
-  }, [d.ranking.mode, d.ranking.activeSourceId, d.rankingSources]);
+  }, [d.ranking.mode, d.ranking.activeSourceId, d.rankingSources, basePlayers]);
 
   const board = useMemo(
     () => computeBoard(d.settings, keepers, d.drafted, allPlayers, d.playerMeta, d.tierOverrides, activeStrategy, activeInterest, sourceTiers),
