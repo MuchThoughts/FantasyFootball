@@ -21,9 +21,46 @@ interface InsightsTabProps {
 }
 
 export function InsightsTab({ keeperPicks, marketByUid, onToggleKeeper }: InsightsTabProps) {
+  // Rows where your saved state and the official sheet disagree. Most of these
+  // are left over from when the keepers were still guesses, so they're worth
+  // pointing at rather than leaving to be discovered on draft night.
+  const conflicts = KEEPER_CANDIDATES.filter((c) => c.official !== isExpectedKeeper(c.uid, keeperPicks));
+
   return (
     <div>
       <CheckedKeepers keeperPicks={keeperPicks} />
+      {conflicts.length > 0 && (
+        <div style={{ ...styles.playerCard, marginBottom: 6, borderColor: "#E1524B" }}>
+          <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 0.4, color: "#E1524B", marginBottom: 4 }}>
+            {conflicts.length} PLAYER{conflicts.length === 1 ? "" : "S"}{" "}
+            DON&apos;T MATCH THE OFFICIAL SHEET
+          </div>
+          <div style={{ fontSize: 11.5, color: "#C6CAD2", lineHeight: 1.5, marginBottom: 6 }}>
+            These were ticked or unticked back when the keepers were still a projection, and your choice still wins
+            over the sheet. Anyone the sheet kept but you&apos;ve unticked is being treated as available at auction
+            when he isn&apos;t.
+          </div>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+            <span style={{ fontSize: 11.5, color: "#EDEEF0", display: "flex", gap: 10, flexWrap: "wrap" }}>
+              {conflicts.map((c) => (
+                <span key={c.uid}>
+                  {c.player}{" "}
+                  <span style={{ color: "#E1524B", fontSize: 10 }}>
+                    {c.official ? `kept by ${c.owner} $${c.cost}, unticked` : "not kept, ticked"}
+                  </span>
+                </span>
+              ))}
+            </span>
+            <button
+              style={{ ...styles.smallBtn, marginLeft: "auto", borderColor: "#E1524B", color: "#E1524B" }}
+              title="Drop every override that disagrees with the sheet. Your other choices are untouched."
+              onClick={() => conflicts.forEach((c) => onToggleKeeper(c.uid, c.official))}
+            >
+              Match the sheet
+            </button>
+          </div>
+        </div>
+      )}
       <details style={{ ...styles.playerCard, marginBottom: 6, padding: "8px 10px" }}>
         <summary
           style={{
@@ -178,11 +215,16 @@ function InsightCard({
       };
     })
     .sort((a, b) => (b.ev ?? -Infinity) - (a.ev ?? -Infinity));
-  // The players he actually kept always show, however they rank on value — then
-  // the best of what he passed over, which is what's left in the auction.
+  // Pinned to the top: everyone the sheet says was kept, plus anyone you've
+  // ticked yourself. Pinning on the SHEET rather than on the checkbox matters —
+  // an old override can untick a declared keeper, and a low-value one like
+  // Michael Wilson would then fall out of the visible list entirely.
+  const isPinned = (k: { id: string; official: boolean }) =>
+    k.official || isExpectedKeeper(k.id, keeperPicks);
+  const pinned = ranked.filter(isPinned);
+  const passed = ranked.filter((k) => !isPinned(k));
+  const topKeepers = [...pinned, ...passed.slice(0, Math.max(6 - pinned.length, 3))];
   const chosen = ranked.filter((k) => isExpectedKeeper(k.id, keeperPicks));
-  const passed = ranked.filter((k) => !isExpectedKeeper(k.id, keeperPicks));
-  const topKeepers = [...chosen, ...passed.slice(0, Math.max(6 - chosen.length, 3))];
   const committed = chosen.reduce((n, k) => n + k.cost, 0);
 
   return (
@@ -311,15 +353,25 @@ function InsightCard({
             <tbody>
               {topKeepers.map((k) => {
                 const checked = isExpectedKeeper(k.id, keeperPicks);
+                // You've overruled the sheet on this row — either way round.
+                const conflicted = k.official !== checked;
                 const evColor = k.ev == null ? "#5B6270" : k.ev >= 0 ? "#4CAF6B" : "#E1524B";
                 return (
                   <tr
                     key={k.player}
-                    title={k.note}
+                    title={
+                      conflicted
+                        ? `${k.official ? "The sheet says he was kept, but you've unticked him — he's being treated as available." : "The sheet doesn't list him as kept, but you've ticked him — he's off the board."} ${k.note}`
+                        : k.note
+                    }
                     onClick={() => onToggleKeeper(k.id, !checked)}
                     style={{
                       cursor: "pointer",
-                      background: checked ? "rgba(232, 163, 61, 0.16)" : "transparent",
+                      background: conflicted
+                        ? "rgba(225, 82, 75, 0.16)"
+                        : checked
+                        ? "rgba(232, 163, 61, 0.16)"
+                        : "transparent",
                     }}
                   >
                     <td style={{ textAlign: "center", padding: "3px 0" }}>
@@ -347,6 +399,12 @@ function InsightCard({
                         >
                           {" "}
                           KEPT{k.eligible2027 ? "" : " · FINAL YR"}
+                        </span>
+                      )}
+                      {conflicted && (
+                        <span style={{ color: "#E1524B", fontSize: 9.5, fontWeight: 700 }}>
+                          {" "}
+                          {k.official ? "· YOU UNTICKED HIM" : "· NOT ON THE SHEET"}
                         </span>
                       )}
                     </td>
