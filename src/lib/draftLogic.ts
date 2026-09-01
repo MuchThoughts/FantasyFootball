@@ -1,4 +1,4 @@
-import { OWNER_INSIGHTS } from "./data/drafters";
+import { OFFICIAL_KEEPERS_2026, OWNER_INSIGHTS } from "./data/drafters";
 import { Player } from "./data/players";
 import { PRICE_CURVE } from "./data/priceCurve";
 import { rawCostAt } from "./data/rawDraftCosts";
@@ -71,10 +71,10 @@ export function uid(name: string): string {
 
 // Players a league-mate might keep, drawn from the Insights keeper options.
 // Ineligible players (already kept twice) are never listed there, so they
-// correctly stay in the pool. `likelyDefault` is the built-in guess (the
-// ★-flagged options); the user can override it per player on the Insights tab.
-// The effective set tints rows pale orange as a "probably won't be available at
-// auction" warning.
+// correctly stay in the pool. `official` marks the players the league's keeper
+// sheet says were actually kept — that's the default, and the user can still
+// override it per player on the Insights tab if the sheet changes. The
+// effective set tints rows pale orange as a "not in the auction" marker.
 export interface LikelyKeeper {
   owner: string;
   cost: number;
@@ -83,34 +83,56 @@ export interface KeeperCandidate extends LikelyKeeper {
   uid: string;
   player: string;
   pos: string;
-  likelyDefault: boolean;
+  official: boolean;
+  eligible2027?: boolean;
+  value2027?: number | null;
 }
 
 // The app user's owner name in the Insights data — their checked keepers count
 // as "mine" (fill strategy slots, spend their budget).
 export const MY_OWNER = "Sean";
 
+const OFFICIAL_BY_UID = new Map(OFFICIAL_KEEPERS_2026.map((k) => [uid(k.player), k]));
+
 export const KEEPER_CANDIDATES: KeeperCandidate[] = OWNER_INSIGHTS.flatMap((o) =>
-  o.keeperOptions.map((k) => ({
-    uid: uid(k.player),
-    player: k.player,
-    pos: k.pos,
-    owner: o.owner,
-    cost: k.cost,
-    likelyDefault: !!k.likely,
-  }))
+  o.keeperOptions.map((k) => {
+    const id = uid(k.player);
+    const kept = OFFICIAL_BY_UID.get(id);
+    return {
+      uid: id,
+      player: k.player,
+      pos: k.pos,
+      owner: o.owner,
+      // The sheet's "Kept For" is the price of record when he was actually kept.
+      cost: kept?.cost ?? k.cost,
+      official: !!kept,
+      eligible2027: kept?.eligible2027,
+      value2027: kept?.value2027,
+    };
+  })
 );
+
+// Every declared keeper has to be somewhere in an owner's options, or the board
+// would quietly leave him in the auction pool. Fail loudly at import instead.
+const unmatched = OFFICIAL_KEEPERS_2026.filter(
+  (k) => !KEEPER_CANDIDATES.some((c) => c.uid === uid(k.player))
+);
+if (unmatched.length > 0) {
+  throw new Error(
+    `Official keepers missing from any owner's keeperOptions: ${unmatched.map((k) => k.player).join(", ")}`
+  );
+}
 
 // A player is on exactly one owner's roster, so keying candidates by uid is safe.
 export const KEEPER_CANDIDATE_BY_UID: Record<string, KeeperCandidate> = {};
 for (const c of KEEPER_CANDIDATES) KEEPER_CANDIDATE_BY_UID[c.uid] = c;
 
-// Effective "expected keeper" = the user's per-player override if set, else the
-// built-in likely default.
+// Effective keeper = the user's per-player override if set, else what the
+// official sheet says.
 export function isExpectedKeeper(playerUid: string, picks: Record<string, boolean>): boolean {
   const override = picks[playerUid];
   if (override !== undefined) return override;
-  return KEEPER_CANDIDATE_BY_UID[playerUid]?.likelyDefault ?? false;
+  return KEEPER_CANDIDATE_BY_UID[playerUid]?.official ?? false;
 }
 
 // The Insights checkboxes ARE the keeper designation: every checked candidate

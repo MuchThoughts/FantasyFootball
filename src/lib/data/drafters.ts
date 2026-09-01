@@ -5,13 +5,15 @@
 // "NPF's Bookie" (2023) is Kyle (his $3 D'Andre Swift became Benjels' $8 keep).
 // All stats below therefore cover three full drafts for every owner.
 //
-// David (VFL) and Jonathan (AFC Richmond) left the league after 2025. Their
-// profiles are kept for the history — league averages include their drafts, and
-// their bids are baked into the three-year price curve every target price comes
-// from — but they are flagged formerOwner and NONE of their keeper options is
-// marked likely, because with no one to keep them their whole rosters went back
-// into the 2026 auction pool. Their options are still listed and checkable, so
-// you can treat one as kept if a replacement owner inherits the roster.
+// David (VFL) and Jonathan (AFC Richmond) left after 2025, but their franchises
+// did NOT fold: the official 2026 keeper sheet shows Bo running the old VFL
+// roster as "Hotspurs" and Kaleb running AFC Richmond, each keeping players at
+// prices only the incumbent roster could have (keeper cost = last salary + $5;
+// Bo's Chase Brown at $15 is David's $10 plus five). So both are live rivals
+// again, flagged inheritedFrom — the stats and reads on those two cards are the
+// PREVIOUS owner's three drafts and say nothing about how the new owner bids.
+// League averages and the three-year price curve are unchanged: those drafts
+// happened regardless of who owns the team now.
 //
 // Metric definitions:
 // - picksTo120: sorted by price, how many players it takes to hit $120 of the
@@ -34,26 +36,71 @@
 // are omitted — they aren't on the board, so keeping them changes nothing.
 // Options are valued against CURRENT 2026 rankings (PLAYERS_DATA), not
 // 2025 finishes — players change teams and situations. Market $ = the league's
-// 3-yr price curve (PRICE_CURVE) at the player's 2026 positional rank; a keep
-// is "likely" when it beats market or clearly fits the owner's pattern.
+// 3-yr price curve (PRICE_CURVE) at the player's 2026 positional rank.
+//
+// Which of those options were actually kept is NOT decided here — that comes
+// from OFFICIAL_KEEPERS_2026 below, transcribed from the league's declared
+// keepers. This list is the menu; that list is the order.
 
 export interface KeeperOption {
   player: string;
   pos: string;
   cost: number;
   note: string;
-  likely?: boolean;
 }
+
+// The 2026 keeps as declared on the official sheet — no longer a projection.
+// This is the one place a player is designated a keeper; the checkboxes on the
+// Insights tab start from it and can still be overridden if the sheet changes.
+export interface OfficialKeeper {
+  player: string; // must match PLAYERS_DATA exactly — uid() keys off it
+  pos: string;
+  cost: number; // "Kept For"
+  owner: string;
+  franchise: string;
+  // A player can be kept two years running and no more, so this year's keeps
+  // split into ones that can be kept again in 2027 (at cost + $5) and ones
+  // burning their final year. It's the difference between a keeper that's an
+  // asset next winter and one that's rented.
+  eligible2027: boolean;
+  value2027: number | null;
+}
+
+export const OFFICIAL_KEEPERS_2026: OfficialKeeper[] = [
+  { player: "Tyler Warren", pos: "TE", cost: 10, owner: "Kaleb", franchise: "AFC Richmond", eligible2027: true, value2027: 15 },
+  { player: "Kenneth Walker III", pos: "RB", cost: 34, owner: "Kaleb", franchise: "AFC Richmond", eligible2027: true, value2027: 39 },
+  { player: "Jahmyr Gibbs", pos: "RB", cost: 54, owner: "Kyle", franchise: "Benjels", eligible2027: false, value2027: null },
+  { player: "Chris Olave", pos: "WR", cost: 10, owner: "Kyle", franchise: "Benjels", eligible2027: true, value2027: 15 },
+  { player: "Bryce Young", pos: "QB", cost: 16, owner: "Mike J.", franchise: "BigDawgs", eligible2027: true, value2027: 21 },
+  { player: "Ladd McConkey", pos: "WR", cost: 12, owner: "Mike J.", franchise: "BigDawgs", eligible2027: false, value2027: null },
+  { player: "Luther Burden III", pos: "WR", cost: 6, owner: "Nathan", franchise: "Everyone Loves The Drake", eligible2027: true, value2027: 11 },
+  { player: "Drake Maye", pos: "QB", cost: 11, owner: "Nathan", franchise: "Everyone Loves The Drake", eligible2027: false, value2027: null },
+  { player: "Travis Etienne Jr.", pos: "RB", cost: 8, owner: "Michael", franchise: "For Kyren Out Loud", eligible2027: true, value2027: 13 },
+  { player: "Rashee Rice", pos: "WR", cost: 14, owner: "Michael", franchise: "For Kyren Out Loud", eligible2027: true, value2027: 19 },
+  { player: "Michael Wilson", pos: "WR", cost: 10, owner: "Ryan", franchise: "Music City Miracle Whip", eligible2027: true, value2027: 15 },
+  { player: "Emeka Egbuka", pos: "WR", cost: 23, owner: "Ryan", franchise: "Music City Miracle Whip", eligible2027: true, value2027: 28 },
+  { player: "Jaxon Smith-Njigba", pos: "WR", cost: 19, owner: "Grayson", franchise: "Scattered Smothered Covered", eligible2027: false, value2027: null },
+  { player: "Caleb Williams", pos: "QB", cost: 29, owner: "Josh", franchise: "SHHH...IT FLOWS DOWNHILL", eligible2027: true, value2027: 34 },
+  { player: "Tyler Shough", pos: "QB", cost: 6, owner: "Josh", franchise: "SHHH...IT FLOWS DOWNHILL", eligible2027: true, value2027: 11 },
+  { player: "Matthew Stafford", pos: "QB", cost: 15, owner: "Sean", franchise: "Digging Out of a Burrow", eligible2027: true, value2027: 20 },
+  { player: "George Pickens", pos: "WR", cost: 16, owner: "Sean", franchise: "Digging Out of a Burrow", eligible2027: true, value2027: 21 },
+  { player: "Jaxson Dart", pos: "QB", cost: 12, owner: "Doug", franchise: "Turbo Team", eligible2027: true, value2027: 17 },
+  { player: "Bo Nix", pos: "QB", cost: 13, owner: "Doug", franchise: "Turbo Team", eligible2027: false, value2027: null },
+  { player: "Chase Brown", pos: "RB", cost: 15, owner: "Bo", franchise: "Hotspurs", eligible2027: false, value2027: null },
+  // The sheet writes him "James Cook III"; PLAYERS_DATA has the same Bills RB
+  // as "James Cook", and the name here has to match for the uid to line up.
+  { player: "James Cook", pos: "RB", cost: 36, owner: "Adam", franchise: "Vols2TheWall", eligible2027: true, value2027: 41 },
+  { player: "Brock Bowers", pos: "TE", cost: 12, owner: "Adam", franchise: "Vols2TheWall", eligible2027: false, value2027: null },
+];
 
 export interface OwnerInsight {
   owner: string;
   team: string; // current (2026) team name
   teamHistory?: string; // older names, if they rebrand
-  // Left the league after 2025. Their profiles stay for the history — their
-  // bids are baked into the three-year price curve — but their rosters went
-  // back into the 2026 pool, so none of their keeper options is likely by
-  // default.
-  formerOwner?: boolean;
+  // This franchise changed hands for 2026 — the new owner inherited the roster
+  // (which is why they can keep players at the old owner's prices), but every
+  // stat and read below is the PREVIOUS owner's three years, not theirs.
+  inheritedFrom?: string;
   archetype: string;
   picksTo120: number;
   onesPerYear: number;
@@ -96,8 +143,8 @@ export const OWNER_INSIGHTS: OwnerInsight[] = [
     loyalty: ["Jayden Daniels", "Jameson Williams", "Cooper Kupp", "David Montgomery", "James Conner"],
     keeperHistory: "2024: Kupp $25, Montgomery $11 · 2025: Daniels $42, Jameson Williams $7",
     keeperOptions: [
-      { player: "Matthew Stafford", pos: "QB", cost: 15, likely: true, note: "2025 salary $10, market ~$21" },
-      { player: "George Pickens", pos: "WR", cost: 16, likely: true, note: "2025 salary $11, market ~$21" },
+      { player: "Matthew Stafford", pos: "QB", cost: 15, note: "2025 salary $10, market ~$21" },
+      { player: "George Pickens", pos: "WR", cost: 16, note: "2025 salary $11, market ~$21" },
       { player: "Cam Skattebo", pos: "RB", cost: 10, note: "2025 salary $5, market ~$13" },
       { player: "Omarion Hampton", pos: "RB", cost: 28, note: "2025 salary $23, market ~$29" },
       { player: "Chris Godwin Jr.", pos: "WR", cost: 6, note: "2025 salary $1, market ~$5" },
@@ -114,14 +161,14 @@ export const OWNER_INSIGHTS: OwnerInsight[] = [
       { player: "Jayden Daniels", pos: "QB", cost: 47, note: "2025 salary $42, market ~$34 · 2nd keep, final year" },
       { player: "DK Metcalf", pos: "WR", cost: 21, note: "2025 salary $16, market ~$8" },
     ],
-    keeperOutlook: "Best pair by 2026 rank: Pickens $16 + Stafford $15 = a WR2 and a starting QB for $31, entering the auction with $169 and QB1 money intact.",
+    keeperOutlook: "Kept Pickens $16 + Stafford $15 — a WR2 and a starting QB for $31, so you sit down with $169 and your QB1 money intact. Both are keepable again in 2027 ($21 and $20), so neither is a rental.",
   },
   {
-    owner: "David",
-    team: "VFL",
-    teamHistory: "was I'd rather be f... in '23",
-    formerOwner: true,
-    archetype: "QB punter, no dumpster-diver",
+    owner: "Bo",
+    team: "Hotspurs",
+    teamHistory: "David's VFL through '25, before that I'd rather be f...",
+    inheritedFrom: "David",
+    archetype: "unknown — inherited David's roster",
     picksTo120: 3.7,
     onesPerYear: 1.0,
     top3Share: 56.8,
@@ -130,28 +177,29 @@ export const OWNER_INSIGHTS: OwnerInsight[] = [
     posShare: { QB: 18.8, RB: 36.9, WR: 38.3, TE: 5.3, DEF: 0.3 },
     posDelta: { QB: -10.0, RB: 5.1, WR: 4.2, TE: 0.6, DEF: -0.1 },
     reads: [
-      "Left the league after 2025, so this is history rather than a live read — but his bids are in the three-year price curve every target on the board is built from.",
-      "The biggest QB punter over three years (-10 pts vs league; $26 total QB room in '24) — he's a core reason QB7–13 went cheap. In '25 he pivoted: Dak $26 + McCarthy $25.",
-      "Never shopped the $1 bin: zero $1 non-DEF buys in '24 AND '25 (league avg is 4/yr). His bench was $2–$11 veterans, not lottery tickets.",
-      "Kept at the very top when he had an elite: CMC $59 + CeeDee $45 in '24 — $104 pre-committed.",
+      "New owner: Bo took over David's roster for 2026. Every number on this card is David's three drafts; treat none of it as a read on how Bo bids. He is the one unknown in the room.",
+      "He kept only Chase Brown $15, so he sits down with $185 — the second-fattest wallet in the league. An unknown bidder with near-full budget is who you get outbid by.",
+      "For history: David was the biggest QB punter over three years (-10 pts vs league; $26 total QB room in '24) and a core reason QB7–13 went cheap. If Bo bids anything like normally, that discount is gone.",
+      "David never shopped the $1 bin — zero $1 non-DEF buys in '24 and '25 against a league average of 4/yr.",
     ],
     loyalty: ["Christian McCaffrey", "CeeDee Lamb", "Tony Pollard", "Chase Brown", "Brock Bowers", "Kirk Cousins"],
-    keeperHistory: "2024: CMC $59, CeeDee $45 · 2025: Chase Brown $10, Bowers $7",
+    keeperHistory: "2024: CMC $59, CeeDee $45 · 2025: Chase Brown $10, Bowers $7 (all David's)",
     keeperOptions: [
-      { player: "Chase Brown", pos: "RB", cost: 15, note: "Was his clearest surplus (2026 RB9, market ~$29) — back in the pool now" },
+      { player: "Chase Brown", pos: "RB", cost: 15, note: "2026 RB9, market ~$29 — the roster's clearest surplus, and Bo kept him" },
       { player: "Sam Darnold", pos: "QB", cost: 14, note: "Fell to 2026 QB23 in Seattle, market ~$3" },
       { player: "Breece Hall", pos: "RB", cost: 26, note: "2026 RB19, market ~$12" },
       { player: "Ricky Pearsall", pos: "WR", cost: 16, note: "2026 WR41" },
       { player: "Malik Nabers", pos: "WR", cost: 46, note: "Still WR10 talent, market ~$22 coming off the injury" },
     ],
     keeperOutlook:
-      "Gone after 2025 — his whole roster went back into the 2026 pool, so nothing here is checked by default. Chase Brown was the one real surplus and is now yours to bid on.",
+      "Kept Chase Brown $15 and nothing else, so Bo enters with $185 and no read attached to it. Everything else off this roster — Darnold, Breece, Pearsall, Nabers — is back in the pool.",
   },
   {
-    owner: "Jonathan",
+    owner: "Kaleb",
     team: "AFC Richmond",
-    formerOwner: true,
-    archetype: "QB hoarder",
+    teamHistory: "Jonathan's franchise through '25",
+    inheritedFrom: "Jonathan",
+    archetype: "unknown — inherited Jonathan's roster",
     picksTo120: 4.0,
     onesPerYear: 5.0,
     top3Share: 56.2,
@@ -160,15 +208,16 @@ export const OWNER_INSIGHTS: OwnerInsight[] = [
     posShare: { QB: 32.3, RB: 30.2, WR: 33.0, TE: 4.0, DEF: 0.3 },
     posDelta: { QB: 3.5, RB: -1.6, WR: -1.1, TE: -0.7, DEF: -0.1 },
     reads: [
-      "Left the league after 2025. His exit is the single biggest change to QB pricing: he drafted exactly FOUR QBs in all three drafts, and that demand is simply gone in 2026.",
-      "With him out, the $1–6 QB3 tier should clear cheaper than the curve implies — the curve still carries his bids.",
-      "Structure swung wildly: '24 was stars-and-scrubs (Allen $62 + Jefferson $53, 72% top-3, eight $1 players), '25 was spread.",
-      "The best flier-to-keeper converter in league history: turned $6 Bucky and $6 Fields into keeps.",
+      "New owner: Kaleb took over Jonathan's roster for 2026. The numbers on this card are Jonathan's three drafts and carry no information about Kaleb.",
+      "Jonathan's four-QBs-a-draft habit is what made the $1–6 QB3 tier cheap, and the three-year curve still carries those bids. Whether that discount survives depends entirely on an owner nobody has bid against.",
+      "Kaleb spent $44 of his $200 keeping Kenneth Walker III $34 and Tyler Warren $10 — a real RB2 and a top-five TE, so he is not shopping for either.",
+      "For history: Jonathan's structure swung wildly ('24 was Allen $62 + Jefferson $53 and eight $1 players, '25 was spread) and he was the best flier-to-keeper converter in the league.",
     ],
     loyalty: ["Breece Hall", "Anthony Richardson", "Justin Fields", "Nick Chubb"],
-    keeperHistory: "2024: Richardson $29, Breece $28 · 2025: Bucky $6, Fields $6",
+    keeperHistory: "2024: Richardson $29, Breece $28 · 2025: Bucky $6, Fields $6 (all Jonathan's)",
     keeperOptions: [
-      { player: "Bucky Irving", pos: "RB", cost: 11, note: "Was his best tag (2026 RB20, market ~$11) — back in the pool now" },
+      { player: "Kenneth Walker III", pos: "RB", cost: 34, note: "Kept. Not on the 2025 option sheet — he came to this roster after it was drawn up" },
+      { player: "Bucky Irving", pos: "RB", cost: 11, note: "2026 RB20, market ~$11 — passed over, so he's in the pool" },
       { player: "Tyler Warren", pos: "TE", cost: 10, note: "2026 TE4, market ~$6" },
       { player: "Tucker Kraft", pos: "TE", cost: 8, note: "2026 TE7 coming off the ACL — market ~$4" },
       { player: "Rome Odunze", pos: "WR", cost: 13, note: "2026 WR29, market ~$6" },
@@ -176,7 +225,7 @@ export const OWNER_INSIGHTS: OwnerInsight[] = [
       { player: "Ashton Jeanty", pos: "RB", cost: 52, note: "2026 RB7, market ~$39" },
     ],
     keeperOutlook:
-      "Gone after 2025 — nothing here is checked by default, and his whole roster is in the 2026 pool. The bigger effect is his absence: four QBs a draft of demand has left the room.",
+      "Kept Walker $34 + Warren $10, entering with $156. Ashton Jeanty $52 and Bucky Irving $11 were both passed over and are in the pool — Bucky at $11 was the sheet's best-value option in the league and nobody took it.",
   },
   {
     owner: "Adam",
@@ -198,8 +247,8 @@ export const OWNER_INSIGHTS: OwnerInsight[] = [
     loyalty: ["Travis Kelce", "Tua Tagovailoa", "Trevor Lawrence", "Courtland Sutton", "Nico Collins", "Sam LaPorta"],
     keeperHistory: "2024: Nico Collins $6 · 2025: Darnold $9, Sutton $7",
     keeperOptions: [
-      { player: "Javonte Williams", pos: "RB", cost: 9, likely: true, note: "2025 salary $4, market ~$19" },
-      { player: "James Cook", pos: "RB", cost: 36, likely: true, note: "2025 salary $31, market ~$44" },
+      { player: "Javonte Williams", pos: "RB", cost: 9, note: "2025 salary $4, market ~$19" },
+      { player: "James Cook", pos: "RB", cost: 36, note: "2025 salary $31, market ~$44" },
       { player: "Brock Bowers", pos: "TE", cost: 12, note: "2025 salary $7, market ~$19 · 2nd keep, final year" },
       { player: "Zay Flowers", pos: "WR", cost: 16, note: "2025 salary $11, market ~$17" },
       { player: "Daniel Jones", pos: "QB", cost: 6, note: "2025 salary $1, market ~$7" },
@@ -213,7 +262,7 @@ export const OWNER_INSIGHTS: OwnerInsight[] = [
       { player: "Geno Smith", pos: "QB", cost: 14, note: "2025 salary $9, market ~$2" },
       { player: "Josh Jacobs", pos: "RB", cost: 46, note: "2025 salary $41, market ~$19" },
     ],
-    keeperOutlook: "Three real values now: Javonte Williams $9 (+$10), Cook $36 (+$8) and Bowers $12 (+$7, 2nd keep). The cheap RB plus Bowers solves TE for $21 and leaves $179; taking Cook instead means committing $45 before the room sits down.",
+    keeperOutlook: "Kept Cook $36 + Bowers $12 — $48 committed, $152 left. He passed on Javonte $9, the cheapest surplus on his sheet, so Javonte is in the pool. Bowers is a 2nd keep and gone after this year; Cook can be held again at $41.",
   },
   {
     owner: "Doug",
@@ -235,8 +284,8 @@ export const OWNER_INSIGHTS: OwnerInsight[] = [
     loyalty: ["Puka Nacua", "Zach Charbonnet", "Brock Purdy", "Bo Nix", "DJ Moore", "Pat Freiermuth"],
     keeperHistory: "2024: Pacheco $16, Puka $6 · 2025: Puka $11, Nix $8",
     keeperOptions: [
-      { player: "Jaxson Dart", pos: "QB", cost: 12, likely: true, note: "2025 salary $7, market ~$27" },
-      { player: "Bo Nix", pos: "QB", cost: 13, likely: true, note: "2025 salary $8, market ~$24 · 2nd keep, final year" },
+      { player: "Jaxson Dart", pos: "QB", cost: 12, note: "2025 salary $7, market ~$27" },
+      { player: "Bo Nix", pos: "QB", cost: 13, note: "2025 salary $8, market ~$24 · 2nd keep, final year" },
       { player: "Joe Burrow", pos: "QB", cost: 54, note: "2025 salary $49, market ~$49" },
       { player: "Blake Corum", pos: "RB", cost: 10, note: "Undrafted in 2025, market ~$4" },
       { player: "Darnell Mooney", pos: "WR", cost: 8, note: "2025 salary $3, market ~$1" },
@@ -251,7 +300,7 @@ export const OWNER_INSIGHTS: OwnerInsight[] = [
       { player: "Alvin Kamara", pos: "RB", cost: 29, note: "2025 salary $24, market ~$1" },
       { player: "Saquon Barkley", pos: "RB", cost: 68, note: "2025 salary $63, market ~$23" },
     ],
-    keeperOutlook: "Likely Nix $13 + Dart $12 → $175 with two top-11 2026 QBs locked, which is exactly how he funds another $60+ RB1. Puka is ineligible (two keeps used).",
+    keeperOutlook: "Kept Dart $12 + Nix $13 exactly as projected → $175 with two top-11 2026 QBs locked, which is how he funds another $60+ RB1. Nix is his final year; Dart can be held at $17. Burrow $54, Purdy $28 and Saquon $68 all went back.",
   },
   {
     owner: "Grayson",
@@ -273,7 +322,7 @@ export const OWNER_INSIGHTS: OwnerInsight[] = [
     loyalty: ["Josh Allen", "Jaxon Smith-Njigba", "Jonathan Taylor", "C.J. Stroud"],
     keeperHistory: "2024: J. Taylor $21, Stroud $6 · 2025: JSN $14, Brian Thomas Jr. $9",
     keeperOptions: [
-      { player: "Jaxon Smith-Njigba", pos: "WR", cost: 19, likely: true, note: "2025 salary $14, market ~$51 · 2nd keep, final year" },
+      { player: "Jaxon Smith-Njigba", pos: "WR", cost: 19, note: "2025 salary $14, market ~$51 · 2nd keep, final year" },
       { player: "Trey McBride", pos: "TE", cost: 27, note: "2025 salary $22, market ~$24" },
       { player: "Tyler Allgeier", pos: "RB", cost: 6, note: "2025 salary $1, market ~$3" },
       { player: "Josh Allen", pos: "QB", cost: 67, note: "2025 salary $62, market ~$62" },
@@ -290,7 +339,7 @@ export const OWNER_INSIGHTS: OwnerInsight[] = [
       { player: "Mike Evans", pos: "WR", cost: 26, note: "2025 salary $21, market ~$9" },
       { player: "Jordan Love", pos: "QB", cost: 38, note: "2025 salary $33, market ~$10" },
     ],
-    keeperOutlook: "JSN $19 is a lock. BTJ's collapse opens the second slot: McBride $27 or even Allen $67 (near-fair now) are the live options. Either way, expect the Allen money to be there a third time.",
+    keeperOutlook: "Kept JSN $19 and stopped there — one of only two owners to use a single slot. That leaves $181, the biggest wallet in the league, and Josh Allen $67, McBride $27 and Jordan Love $38 all back in the pool. Expect the Allen money to be there a third time, now with more behind it.",
   },
   {
     owner: "Josh",
@@ -312,8 +361,8 @@ export const OWNER_INSIGHTS: OwnerInsight[] = [
     loyalty: ["Amon-Ra St. Brown", "Aaron Rodgers", "D'Andre Swift"],
     keeperHistory: "2024: none · 2025: none — the league's only serial non-keeper",
     keeperOptions: [
-      { player: "Caleb Williams", pos: "QB", cost: 29, likely: true, note: "2025 salary $24, market ~$41" },
-      { player: "Tyler Shough", pos: "QB", cost: 6, likely: true, note: "2025 salary $1, market ~$12" },
+      { player: "Caleb Williams", pos: "QB", cost: 29, note: "2025 salary $24, market ~$41" },
+      { player: "Tyler Shough", pos: "QB", cost: 6, note: "2025 salary $1, market ~$12" },
       { player: "Amon-Ra St. Brown", pos: "WR", cost: 44, note: "2025 salary $39, market ~$43" },
       { player: "Kyle Pitts Sr.", pos: "TE", cost: 6, note: "2025 salary $1, market ~$5" },
       { player: "Jonathan Taylor", pos: "RB", cost: 47, note: "2025 salary $42, market ~$44" },
@@ -330,7 +379,7 @@ export const OWNER_INSIGHTS: OwnerInsight[] = [
       { player: "Patrick Mahomes", pos: "QB", cost: 46, note: "2025 salary $41, market ~$28" },
       { player: "James Conner", pos: "RB", cost: 26, note: "2025 salary $21, market ~$1" },
     ],
-    keeperOutlook: "Still the coin flip of the league: Caleb $29 (+$12) and Shough $6 (+$6) are the only players beating market, and he has never kept anyone. If the streak holds, plan for him to bully the WR middle rounds with $200.",
+    keeperOutlook: "The never-keeps streak is over: Caleb $29 + Shough $6, both QBs, $35 committed and $165 left. He took exactly the two players beating market. Mahomes $46, Amon-Ra $44 and Jonathan Taylor $47 are all in the pool.",
   },
   {
     owner: "Kyle",
@@ -352,8 +401,8 @@ export const OWNER_INSIGHTS: OwnerInsight[] = [
     loyalty: ["Jahmyr Gibbs", "Tee Higgins", "D'Andre Swift"],
     keeperHistory: "2024: Love $16, Swift $8 · 2025: Gibbs $49, Tee Higgins $20",
     keeperOptions: [
-      { player: "Chris Olave", pos: "WR", cost: 10, likely: true, note: "2025 salary $5, market ~$25" },
-      { player: "Jahmyr Gibbs", pos: "RB", cost: 54, likely: true, note: "2025 salary $49, market ~$63 · 2nd keep, final year" },
+      { player: "Chris Olave", pos: "WR", cost: 10, note: "2025 salary $5, market ~$25" },
+      { player: "Jahmyr Gibbs", pos: "RB", cost: 54, note: "2025 salary $49, market ~$63 · 2nd keep, final year" },
       { player: "Colston Loveland", pos: "TE", cost: 6, note: "2025 salary $1, market ~$9" },
       { player: "Devonta Smith", pos: "WR", cost: 23, note: "2025 salary $18, market ~$20" },
       { player: "Jalen Hurts", pos: "QB", cost: 57, note: "2025 salary $52, market ~$52" },
@@ -369,7 +418,7 @@ export const OWNER_INSIGHTS: OwnerInsight[] = [
       { player: "Devin Singletary", pos: "RB", cost: 10, note: "Undrafted in 2025, market ~$1" },
       { player: "Chuba Hubbard", pos: "RB", cost: 26, note: "2025 salary $21, market ~$10" },
     ],
-    keeperOutlook: "Likely Gibbs $54 + Olave $10 → $136 left, meaning ONE more big anchor and then $1s. Once he buys his second $40+ player, he's done bidding.",
+    keeperOutlook: "Kept Gibbs $54 + Olave $10 as projected → $136 left, meaning ONE more big anchor and then $1s. Once he buys his second $40+ player he's done bidding. Hurts $57 went back.",
   },
   {
     owner: "Michael",
@@ -391,8 +440,8 @@ export const OWNER_INSIGHTS: OwnerInsight[] = [
     loyalty: ["Lamar Jackson", "Kyren Williams", "Rashee Rice", "Alvin Kamara", "Jaylen Warren"],
     keeperHistory: "2024: Kyren $10, Kamara $7 · 2025: Kyren $15, Nico $11",
     keeperOptions: [
-      { player: "Travis Etienne Jr.", pos: "RB", cost: 8, likely: true, note: "2025 salary $3, market ~$20" },
-      { player: "Rashee Rice", pos: "WR", cost: 14, likely: true, note: "2025 salary $9, market ~$24" },
+      { player: "Travis Etienne Jr.", pos: "RB", cost: 8, note: "2025 salary $3, market ~$20" },
+      { player: "Rashee Rice", pos: "WR", cost: 14, note: "2025 salary $9, market ~$24" },
       { player: "Quinshon Judkins", pos: "RB", cost: 8, note: "2025 salary $3, market ~$13" },
       { player: "Lamar Jackson", pos: "QB", cost: 67, note: "2025 salary $62, market ~$62" },
       { player: "Mark Andrews", pos: "TE", cost: 7, note: "2025 salary $2, market ~$2" },
@@ -406,7 +455,7 @@ export const OWNER_INSIGHTS: OwnerInsight[] = [
       { player: "Ja'Marr Chase", pos: "WR", cost: 64, note: "2025 salary $59, market ~$52" },
       { player: "C.J. Stroud", pos: "QB", cost: 15, note: "2025 salary $10, market ~$3" },
     ],
-    keeperOutlook: "Kyren and Nico are both ineligible (two keeps used). Etienne $8 (+$12) and Rice $14 (+$10) are the value pair → $178, and history says ~$120 of it goes to two players by round 2. Judkins $8 is a live third.",
+    keeperOutlook: "Kept Etienne $8 + Rice $14 as projected → $178, and history says ~$120 of it goes to two players by round 2. He left Judkins $8 on the table, so that value is in the pool along with Lamar $67 and Chase $64.",
   },
   {
     owner: "Mike J.",
@@ -427,7 +476,7 @@ export const OWNER_INSIGHTS: OwnerInsight[] = [
     loyalty: ["De'Von Achane", "Ladd McConkey", "Brandon Aiyuk", "Darnell Mooney"],
     keeperHistory: "2024: Aiyuk $11, Achane $6 · 2025: Achane $11, McConkey $7",
     keeperOptions: [
-      { player: "Ladd McConkey", pos: "WR", cost: 12, likely: true, note: "2025 salary $7, market ~$12 · 2nd keep, final year" },
+      { player: "Ladd McConkey", pos: "WR", cost: 12, note: "2025 salary $7, market ~$12 · 2nd keep, final year" },
       { player: "Rhamondre Stevenson", pos: "RB", cost: 7, note: "2025 salary $2, market ~$6" },
       { player: "Christian McCaffrey", pos: "RB", cost: 52, note: "2025 salary $47, market ~$50" },
       { player: "Texans D/ST", pos: "DEF", cost: 6, note: "2025 salary $1, market ~$2" },
@@ -443,7 +492,7 @@ export const OWNER_INSIGHTS: OwnerInsight[] = [
       { player: "Justin Jefferson", pos: "WR", cost: 55, note: "2025 salary $50, market ~$41" },
       { player: "Baker Mayfield", pos: "QB", cost: 27, note: "2025 salary $22, market ~$13" },
     ],
-    keeperOutlook: "Achane is ineligible (two keeps used) and nothing else beats market — McConkey at breakeven is the ceiling. If he throws it all back he enters with the full $200: brace for another $160-on-three-players whale draft.",
+    keeperOutlook: "He did not throw it back: McConkey $12 + Bryce Young $16, $28 committed and $172 left — still enough for another $160-on-three-players whale draft. Young at $16 is the surprise, a QB2 price for a QB he clearly rates. CMC $52 and Jefferson $55 are in the pool.",
   },
   {
     owner: "Nathan",
@@ -465,8 +514,8 @@ export const OWNER_INSIGHTS: OwnerInsight[] = [
     loyalty: ["Drake London", "Drake Maye", "James Cook", "Christian Kirk"],
     keeperHistory: "2024: Cook $13, LaPorta $6 · 2025: London $34, Maye $6",
     keeperOptions: [
-      { player: "Drake Maye", pos: "QB", cost: 11, likely: true, note: "2025 salary $6, market ~$55 · 2nd keep, final year" },
-      { player: "Luther Burden III", pos: "WR", cost: 6, likely: true, note: "2025 salary $1, market ~$11" },
+      { player: "Drake Maye", pos: "QB", cost: 11, note: "2025 salary $6, market ~$55 · 2nd keep, final year" },
+      { player: "Luther Burden III", pos: "WR", cost: 6, note: "2025 salary $1, market ~$11" },
       { player: "Bhayshul Tuten", pos: "RB", cost: 7, note: "2025 salary $2, market ~$10" },
       { player: "Trevor Lawrence", pos: "QB", cost: 24, note: "2025 salary $19, market ~$22" },
       { player: "Drake London", pos: "WR", cost: 39, note: "2025 salary $34, market ~$34 · 2nd keep, final year" },
@@ -482,12 +531,12 @@ export const OWNER_INSIGHTS: OwnerInsight[] = [
       { player: "TreVeyon Henderson", pos: "RB", cost: 26, note: "2025 salary $21, market ~$12" },
       { player: "Marvin Harrison Jr.", pos: "WR", cost: 21, note: "2025 salary $16, market ~$6" },
     ],
-    keeperOutlook: "Maye $11 at a $55 market is the biggest single edge in the league — an automatic keep, and his 2nd/final year. The old second slot is gone: London $39 (2nd keep) and Bijan $69 both sit below market now, so the value play is a cheap flier like Burden $6. Maye alone = $189 to spend.",
+    keeperOutlook: "Called it: Maye $11 at a ~$55 market is the biggest single edge in the league, and Burden $6 is the cheap-flier second slot. $17 committed, $183 left — the third-fattest wallet, holding a top-three QB. Maye is his final year. Bijan $69 and London $39 went back.",
   },
   {
     owner: "Ryan",
-    team: "Smokin' Herbs",
-    teamHistory: "was Herbs and spices '25, Music City Miracle Whip '24",
+    team: "Music City Miracle Whip",
+    teamHistory: "was Smokin' Herbs, Herbs and spices '25 — back to the '24 name",
     archetype: "WR+TE buyer, flier factory",
     picksTo120: 3.7,
     onesPerYear: 5.7,
@@ -522,6 +571,6 @@ export const OWNER_INSIGHTS: OwnerInsight[] = [
       { player: "George Kittle", pos: "TE", cost: 25, note: "2025 salary $20, market ~$1" },
       { player: "Derrick Henry", pos: "RB", cost: 56, note: "2025 salary $51, market ~$21" },
     ],
-    keeperOutlook: "Kyler is ineligible (two keeps used). Nothing on his roster beats market: Egbuka $23 + Herbert $27 → $150 costs ~$10 vs re-buying, and it caps his AJB chase money — watch whether loyalty or math wins.",
+    keeperOutlook: "Egbuka $23 yes, but Herbert $27 no — he took Michael Wilson $10 instead, spending $33 and keeping $167 for the A.J. Brown chase. That puts Justin Herbert back in the QB pool, which matters: he's the best arm nobody has to outbid a keeper for.",
   },
 ];

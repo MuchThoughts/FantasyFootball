@@ -315,7 +315,7 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
       update((prev) => {
         const picks = { ...prev.keeperPicks };
         const cand = KEEPER_CANDIDATE_BY_UID[playerUid];
-        if (cand && next === cand.likelyDefault) delete picks[playerUid];
+        if (cand && next === cand.official) delete picks[playerUid];
         else picks[playerUid] = next;
         return { ...prev, keeperPicks: picks };
       });

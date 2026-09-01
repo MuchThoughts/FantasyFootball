@@ -1,7 +1,14 @@
 "use client";
 
 import { LEAGUE_AVG, OWNER_INSIGHTS, OwnerInsight } from "@/lib/data/drafters";
-import { isExpectedKeeper, KEEPER_CANDIDATES, POS_COLOR, POSITIONS, uid } from "@/lib/draftLogic";
+import {
+  isExpectedKeeper,
+  KEEPER_CANDIDATE_BY_UID,
+  KEEPER_CANDIDATES,
+  POS_COLOR,
+  POSITIONS,
+  uid,
+} from "@/lib/draftLogic";
 import { styles } from "./styles";
 
 interface InsightsTabProps {
@@ -31,8 +38,11 @@ export function InsightsTab({ keeperPicks, marketByUid, onToggleKeeper }: Insigh
           HOW THESE NUMBERS WORK
         </summary>
         <div style={{ fontSize: 12, color: "#8B92A0", lineHeight: 1.55, marginTop: 8 }}>
-          Built from your league&apos;s 2023–2025 auction results and the official keeper sheet. Keeper costs shown
-          are 2026 prices (last salary + $5, undrafted = $10); a player can only be kept two years running. Value =
+          Built from your league&apos;s 2023–2025 auction results and the official keeper sheet. The 2026 keeps are
+          now <b>declared, not projected</b> — the 22 players on the sheet are checked by default and marked KEPT,
+          and everything else on a roster is in the auction. Keeper costs shown are 2026 prices (last salary + $5,
+          undrafted = $10); a player can only be kept two years running, so a keep in its second year is flagged
+          <i> final yr</i> and has no 2027 value. Value =
           market − keeper cost, where <b>market is the projected draft cost for the player&apos;s absolute positional
           rank</b> — if he&apos;s the RB19, market is what your league&apos;s RB19 slot has actually gone for. Ranks
           never shift when players above are kept or drafted; it&apos;s the same rank and raw draft-cost data as the
@@ -64,12 +74,15 @@ function CheckedKeepers({ keeperPicks }: { keeperPicks: Record<string, boolean> 
   return (
     <div style={{ ...styles.playerCard, marginBottom: 6 }}>
       <div style={{ fontSize: 11, color: "#8B92A0", marginBottom: 6, fontWeight: 600, letterSpacing: 0.4 }}>
-        KEEPERS YOU&apos;VE CHECKED{" "}
-        <span style={{ color: "#5B6270", fontWeight: 400 }}>· {picked.length} across the league</span>
+        KEEPERS OFF THE BOARD{" "}
+        <span style={{ color: "#5B6270", fontWeight: 400 }}>
+          · {picked.length} across the league, ${picked.reduce((n, c) => n + c.cost, 0)} of the $2,400 in the room
+          already committed
+        </span>
       </div>
       {groups.length === 0 ? (
         <div style={{ fontSize: 12, color: "#5B6270" }}>
-          None yet — check the boxes in each owner&apos;s Keeper Watch below and they&apos;ll collect here.
+          None — check the boxes in each owner&apos;s Keeper Watch below and they&apos;ll collect here.
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -146,37 +159,49 @@ function InsightCard({
 }) {
   const isSean = d.owner === "Sean";
 
-  // Rank this owner's keeper options by expected value (market − keeper cost)
-  // and show the best 4; that's where their two keeps almost certainly come from.
+  // Rank this owner's keeper options by expected value (market − keeper cost).
   const ranked = d.keeperOptions
     .map((k) => {
       const id = uid(k.player);
+      const cand = KEEPER_CANDIDATE_BY_UID[id];
+      const cost = cand?.cost ?? k.cost;
       const market = marketByUid.get(id) ?? null;
-      return { ...k, id, market, ev: market != null ? market - k.cost : null };
+      return {
+        ...k,
+        id,
+        cost,
+        market,
+        ev: market != null ? market - cost : null,
+        official: !!cand?.official,
+        eligible2027: cand?.eligible2027,
+        value2027: cand?.value2027,
+      };
     })
     .sort((a, b) => (b.ev ?? -Infinity) - (a.ev ?? -Infinity));
-  const topKeepers = ranked.slice(0, 6);
-  const selectedCount = ranked.filter((k) => isExpectedKeeper(k.id, keeperPicks)).length;
+  // The players he actually kept always show, however they rank on value — then
+  // the best of what he passed over, which is what's left in the auction.
+  const chosen = ranked.filter((k) => isExpectedKeeper(k.id, keeperPicks));
+  const passed = ranked.filter((k) => !isExpectedKeeper(k.id, keeperPicks));
+  const topKeepers = [...chosen, ...passed.slice(0, Math.max(6 - chosen.length, 3))];
+  const committed = chosen.reduce((n, k) => n + k.cost, 0);
 
   return (
-    // Former owners are dimmed so they don't read as rivals you're bidding against.
     <div
       style={{
         ...styles.playerCard,
-        borderColor: isSean ? "#4CAF6B" : "#2A2F38",
-        opacity: d.formerOwner ? 0.72 : 1,
+        borderColor: isSean ? "#4CAF6B" : d.inheritedFrom ? "#7E8CE0" : "#2A2F38",
       }}
     >
       <div style={styles.playerRowTop}>
         <div style={styles.playerInfo}>
           <div style={styles.playerName}>
             {d.owner} {isSean && <span style={styles.mineTag}>YOU</span>}
-            {d.formerOwner && (
+            {d.inheritedFrom && (
               <span
-                style={{ ...styles.mineTag, color: "#8B92A0" }}
-                title="Left the league after 2025 — kept here for the history. His roster is back in the 2026 pool."
+                style={{ ...styles.mineTag, color: "#7E8CE0" }}
+                title={`Took over ${d.inheritedFrom}'s roster for 2026 — every stat on this card is ${d.inheritedFrom}'s three drafts and tells you nothing about how ${d.owner} bids.`}
               >
-                LEFT AFTER &rsquo;25
+                NEW OWNER
               </span>
             )}
           </div>
@@ -187,6 +212,10 @@ function InsightCard({
         </div>
         <div style={styles.priceCol}>
           <div style={{ fontSize: 11, fontWeight: 600, color: "#E8A33D" }}>{d.archetype}</div>
+          <div style={{ ...styles.tdMono, fontSize: 11, color: "#EDEEF0" }}>
+            ${committed} kept · <b style={{ color: committed <= 25 ? "#E1524B" : "#8FCB9E" }}>${200 - committed}</b>{" "}
+            to spend
+          </div>
           <div style={{ fontSize: 10, color: "#8B92A0" }}>
             max ever: {d.maxEver.player} ${d.maxEver.price} (&rsquo;{String(d.maxEver.year).slice(2)})
           </div>
@@ -251,22 +280,17 @@ function InsightCard({
             }}
           >
             <span style={{ fontSize: 11, fontWeight: 600, color: "#5B9BD5" }}>
-              2026 KEEPER WATCH <span style={{ color: "#5B6270", fontWeight: 400 }}>· kept {d.keeperHistory}</span>
+              2026 KEEPERS <span style={{ color: "#5B6270", fontWeight: 400 }}>· previously {d.keeperHistory}</span>
             </span>
-            <span style={{ fontSize: 10, color: selectedCount === 2 ? "#8FCB9E" : "#E8A33D" }}>
-              {selectedCount}/2 picked
+            <span style={{ fontSize: 10, color: chosen.length === 0 ? "#E8A33D" : "#8FCB9E" }}>
+              {chosen.length} of 2 slots used
             </span>
           </div>
           <div style={{ fontSize: 10, color: "#5B6270", marginBottom: 6 }}>
-            Top 6 by value (market − keeper cost), where market is the projected draft cost for this player&apos;s
-            2026 positional rank (see the Market column&apos;s tooltip). Check the two you expect{" "}
-            {d.formerOwner
-              ? `${d.owner}'s 2025 roster — all back in the pool`
-              : isSean
-              ? "to keep"
-              : `${d.owner} to keep`}{" "}
-            — checked players are treated as kept: off the board and
-            their cost pre-committed.
+            The declared keeps, then the best of what {isSean ? "you" : d.owner}{" "}
+            left behind — those are in the auction. Value is market − keeper cost, market being the projected draft
+            cost for this player&apos;s 2026
+            positional rank (see the Market column&apos;s tooltip). The boxes still override the sheet if it changes.
           </div>
 
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
@@ -312,10 +336,17 @@ function InsightCard({
                       <span style={{ color: (POS_COLOR as Record<string, string>)[k.pos] ?? "#8B92A0", fontSize: 10 }}>
                         {k.pos}
                       </span>
-                      {k.likely && (
-                        <span style={{ color: "#E8A33D", fontSize: 10 }} title="Our default guess">
+                      {k.official && (
+                        <span
+                          style={{ color: "#E8A33D", fontSize: 9.5, fontWeight: 700, letterSpacing: 0.3 }}
+                          title={
+                            k.eligible2027
+                              ? `Officially kept for $${k.cost}. Can be kept again in 2027 at $${k.value2027}.`
+                              : `Officially kept for $${k.cost}. Second straight year, so he can't be kept again — he's in next year's auction.`
+                          }
+                        >
                           {" "}
-                          ★
+                          KEPT{k.eligible2027 ? "" : " · FINAL YR"}
                         </span>
                       )}
                     </td>
