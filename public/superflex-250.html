@@ -1,0 +1,710 @@
+<title>The Superflex 250</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root{
+  --ground:#EFF3F4; --surface:#FFFFFF; --surface-2:#E4EAEC; --surface-3:#F6F9F9;
+  --ink:#101719; --ink-2:#495C63; --ink-3:#7E8F96;
+  --rule:#D3DDE0; --rule-soft:#E4EBED;
+  --accent:#0A6A73; --accent-ink:#FFFFFF; --accent-soft:#D2E7E9;
+  --meter-track:#DEE6E8; --meter-fill:#0A6A73;
+  --qb-bg:#E7E2FA; --qb-fg:#463AA3;
+  --rb-bg:#DBEEE0; --rb-fg:#2B6740;
+  --wr-bg:#FAE6D3; --wr-fg:#96520F;
+  --te-bg:#F9DFE5; --te-fg:#9A3150;
+  --k-bg:#E1E8EC;  --k-fg:#4A5F6E;
+  --def-bg:#E9EBD2; --def-fg:#5C6220;
+  --shadow:0 1px 2px rgba(16,23,25,.06), 0 8px 24px -18px rgba(16,23,25,.5);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#0C1214; --surface:#131B1E; --surface-2:#1B2529; --surface-3:#101819;
+    --ink:#E7EFF1; --ink-2:#97A8AE; --ink-3:#68787F;
+    --rule:#222E33; --rule-soft:#1A2428;
+    --accent:#4BD3DB; --accent-ink:#08181A; --accent-soft:#0E3236;
+    --meter-track:#202C31; --meter-fill:#4BD3DB;
+    --qb-bg:#25214A; --qb-fg:#A99CFF;
+    --rb-bg:#16301E; --rb-fg:#78C88B;
+    --wr-bg:#392412; --wr-fg:#E7A566;
+    --te-bg:#391A23; --te-fg:#EF90A5;
+    --k-bg:#1D2932;  --k-fg:#91ADBF;
+    --def-bg:#292B14; --def-fg:#C1C777;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -18px rgba(0,0,0,.9);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0C1214; --surface:#131B1E; --surface-2:#1B2529; --surface-3:#101819;
+  --ink:#E7EFF1; --ink-2:#97A8AE; --ink-3:#68787F;
+  --rule:#222E33; --rule-soft:#1A2428;
+  --accent:#4BD3DB; --accent-ink:#08181A; --accent-soft:#0E3236;
+  --meter-track:#202C31; --meter-fill:#4BD3DB;
+  --qb-bg:#25214A; --qb-fg:#A99CFF;
+  --rb-bg:#16301E; --rb-fg:#78C88B;
+  --wr-bg:#392412; --wr-fg:#E7A566;
+  --te-bg:#391A23; --te-fg:#EF90A5;
+  --k-bg:#1D2932;  --k-fg:#91ADBF;
+  --def-bg:#292B14; --def-fg:#C1C777;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -18px rgba(0,0,0,.9);
+}
+
+*{box-sizing:border-box}
+body{
+  background:var(--ground); color:var(--ink);
+  font-family:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-size:14px; line-height:1.45; -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:900px; margin:0 auto; padding:0 16px 72px}
+
+/* ---------- masthead ---------- */
+.masthead{padding:28px 0 18px}
+.kicker{
+  font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:11px; font-weight:500;
+  letter-spacing:.14em; text-transform:uppercase; color:var(--ink-3);
+}
+h1{
+  font-family:"Bricolage Grotesque","IBM Plex Sans",sans-serif; font-weight:800;
+  font-size:clamp(30px,6vw,46px); line-height:1; letter-spacing:-.025em;
+  margin:6px 0 8px; text-wrap:balance;
+}
+.dek{color:var(--ink-2); max-width:62ch; margin:0}
+.dek b{color:var(--ink); font-weight:600}
+
+/* ---------- control bar ---------- */
+.bar{
+  position:sticky; top:0; z-index:20;
+  background:color-mix(in srgb, var(--ground) 88%, transparent);
+  backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--rule);
+  margin:0 -16px; padding:10px 16px 0;
+}
+.bar-inner{max-width:900px; margin:0 auto; display:flex; flex-direction:column; gap:9px}
+.bar-top{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
+.search{
+  flex:1 1 190px; min-width:0; appearance:none;
+  font:inherit; color:var(--ink); background:var(--surface);
+  border:1px solid var(--rule); border-radius:7px; padding:7px 11px;
+}
+.search::placeholder{color:var(--ink-3)}
+.search:focus-visible{outline:2px solid var(--accent); outline-offset:1px; border-color:var(--accent)}
+
+.tally{
+  font-family:"IBM Plex Mono",monospace; font-size:12px; font-variant-numeric:tabular-nums;
+  color:var(--ink-2); white-space:nowrap; margin-left:auto;
+}
+.tally b{color:var(--ink); font-weight:600; font-size:15px}
+
+button{font:inherit; color:inherit}
+.btn{
+  appearance:none; background:var(--surface); border:1px solid var(--rule);
+  border-radius:7px; padding:7px 11px; cursor:pointer; white-space:nowrap;
+  font-size:13px; color:var(--ink-2); transition:border-color .12s, color .12s, background .12s;
+}
+.btn:hover:not(:disabled){border-color:var(--ink-3); color:var(--ink)}
+.btn:disabled{opacity:.42; cursor:not-allowed}
+.btn:focus-visible{outline:2px solid var(--accent); outline-offset:1px}
+.btn[aria-pressed="true"]{background:var(--accent-soft); border-color:var(--accent); color:var(--accent)}
+.btn.warn{color:#B4342F; border-color:#B4342F}
+:root[data-theme="dark"] .btn.warn,
+:root:not([data-theme="light"]) .btn.warn{color:#FF8A80; border-color:#FF8A80}
+@media (prefers-color-scheme: light){:root:not([data-theme="dark"]) .btn.warn{color:#B4342F; border-color:#B4342F}}
+
+.filters{display:flex; gap:5px; flex-wrap:wrap; align-items:center}
+.chip{
+  appearance:none; cursor:pointer; background:transparent; border:1px solid var(--rule);
+  border-radius:99px; padding:4px 11px; font-size:12px; font-weight:500; color:var(--ink-2);
+  font-family:"IBM Plex Mono",monospace; letter-spacing:.04em;
+  transition:background .12s, color .12s, border-color .12s;
+}
+.chip:hover{border-color:var(--ink-3); color:var(--ink)}
+.chip:focus-visible{outline:2px solid var(--accent); outline-offset:1px}
+.chip[aria-pressed="true"]{background:var(--ink); border-color:var(--ink); color:var(--ground)}
+
+/* ---------- column heads ---------- */
+.heads{
+  display:grid; gap:10px; align-items:center;
+  grid-template-columns:2.6rem minmax(0,1fr) 2.2rem 3.1rem 3rem 4.6rem;
+  padding:8px 12px 7px; margin-top:2px;
+  font-family:"IBM Plex Mono",monospace; font-size:10px; letter-spacing:.12em;
+  text-transform:uppercase; color:var(--ink-3);
+}
+.heads span:nth-child(n+3){text-align:right}
+
+/* ---------- tier bands ---------- */
+.tier{display:flex; align-items:baseline; gap:10px; padding:22px 2px 7px}
+.tier-name{
+  font-family:"Bricolage Grotesque",sans-serif; font-weight:600; font-size:15px;
+  letter-spacing:-.01em;
+}
+.tier-rule{flex:1; height:1px; background:var(--rule)}
+.tier-left{
+  font-family:"IBM Plex Mono",monospace; font-size:11px; color:var(--ink-3);
+  font-variant-numeric:tabular-nums; white-space:nowrap;
+}
+.tier.empty{opacity:.4}
+.tier.empty .tier-left{color:var(--accent)}
+
+/* ---------- rows ---------- */
+.list{display:flex; flex-direction:column; gap:3px}
+.row{
+  display:grid; gap:10px; align-items:center; width:100%; text-align:left;
+  grid-template-columns:2.6rem minmax(0,1fr) 2.2rem 3.1rem 3rem 4.6rem;
+  background:var(--surface); border:1px solid var(--rule-soft); border-radius:8px;
+  padding:9px 12px; cursor:pointer;
+  transition:opacity .16s ease, transform .16s ease, border-color .12s, background .12s;
+}
+.row:hover{border-color:var(--ink-3); background:var(--surface-3)}
+.row:focus-visible{outline:2px solid var(--accent); outline-offset:1px}
+.row.leaving{opacity:0; transform:translateX(10px)}
+.row.taken{background:transparent; border-style:dashed; border-color:var(--rule); opacity:.5}
+.row.taken .name{text-decoration:line-through; text-decoration-thickness:1px}
+.row[hidden]{display:none}
+
+.rk{
+  font-family:"IBM Plex Mono",monospace; font-size:13px; font-weight:500;
+  color:var(--ink-3); font-variant-numeric:tabular-nums;
+}
+.who{display:flex; align-items:baseline; gap:8px; min-width:0}
+.name{font-weight:600; letter-spacing:-.005em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.team{
+  font-family:"IBM Plex Mono",monospace; font-size:11px; color:var(--ink-3);
+  letter-spacing:.05em; flex:none;
+}
+.pos{
+  font-family:"IBM Plex Mono",monospace; font-size:10.5px; font-weight:600; letter-spacing:.03em;
+  padding:2px 6px; border-radius:4px; flex:none;
+  background:var(--k-bg); color:var(--k-fg);
+}
+.pos.QB{background:var(--qb-bg); color:var(--qb-fg)}
+.pos.RB{background:var(--rb-bg); color:var(--rb-fg)}
+.pos.WR{background:var(--wr-bg); color:var(--wr-fg)}
+.pos.TE{background:var(--te-bg); color:var(--te-fg)}
+.pos.K{background:var(--k-bg); color:var(--k-fg)}
+.pos.DEF{background:var(--def-bg); color:var(--def-fg)}
+
+.num{
+  font-family:"IBM Plex Mono",monospace; font-size:12px; text-align:right;
+  color:var(--ink-2); font-variant-numeric:tabular-nums;
+}
+.val{display:flex; flex-direction:column; align-items:flex-end; gap:3px}
+.val .n{
+  font-family:"IBM Plex Mono",monospace; font-size:14px; font-weight:600;
+  font-variant-numeric:tabular-nums; line-height:1;
+}
+.meter{width:100%; height:3px; border-radius:2px; background:var(--meter-track); overflow:hidden}
+.meter i{display:block; height:100%; background:var(--meter-fill); border-radius:2px}
+
+.empty-state{
+  text-align:center; color:var(--ink-3); padding:60px 20px;
+  font-family:"IBM Plex Mono",monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase;
+}
+.foot{
+  margin-top:38px; padding-top:16px; border-top:1px solid var(--rule);
+  color:var(--ink-3); font-size:12px; line-height:1.6;
+}
+
+@media (max-width:600px){
+  .heads,.row{grid-template-columns:2.3rem minmax(0,1fr) 4.2rem; gap:8px}
+  .heads span:nth-child(3),.heads span:nth-child(4),.heads span:nth-child(5),
+  .row .num{display:none}
+  .who{flex-wrap:wrap; gap:4px 7px}
+  .tally{width:100%; margin-left:0; text-align:right}
+}
+@media (prefers-reduced-motion:reduce){
+  *{transition-duration:.01ms !important}
+}
+</style>
+
+<div class="wrap">
+  <header class="masthead">
+    <div class="kicker">Superflex · Half-PPR · 2026</div>
+    <h1>The Superflex 250</h1>
+    <p class="dek">Draft Sharks' full 3D Value board, twelve tiers deep. <b>Click a player to strike them off</b> as they come off the board — the tier headers keep a running count so you can see a tier break coming.</p>
+  </header>
+
+  <div class="bar">
+    <div class="bar-inner">
+      <div class="bar-top">
+        <input id="q" class="search" type="search" placeholder="Search player or team…" autocomplete="off" spellcheck="false">
+        <button id="showTaken" class="btn" type="button" aria-pressed="false">Show taken</button>
+        <button id="undo" class="btn" type="button" disabled>Undo</button>
+        <button id="reset" class="btn warn" type="button">Reset</button>
+        <div class="tally"><b id="avail">250</b> available &middot; <span id="gone">0</span> off the board</div>
+      </div>
+      <div class="filters" id="filters" role="group" aria-label="Filter by position"></div>
+      <div class="heads">
+        <span>Rk</span><span>Player</span><span>Bye</span><span>ADP</span><span>Proj</span><span>3D Val</span>
+      </div>
+    </div>
+  </div>
+
+  <main id="board"></main>
+  <div class="empty-state" id="none" hidden>No players match</div>
+
+  <footer class="foot">
+    Rankings, projections and 3D Values from the Draft Sharks 2026 Superflex Half-PPR board (Sep 6, 2026).
+    Proj is the Draft Sharks projection; hover or long-press a row for that player's floor, ceiling, injury risk and strength of schedule.
+    Your board is saved in this browser only.
+  </footer>
+</div>
+
+<script>
+/* rank|name|team|pos|games|adp|bye|sos|risk|floor|consensus|dsProj|ceiling|value */
+var RAW = `
+1|Josh Allen|BUF|QB1|17|1.03|7|-3.4%|33%|302|358|373|436|100
+2|Jahmyr Gibbs|DET|RB1|17|1.01|6|0.9%|54%|264|319|322|371|90
+3|Bijan Robinson|ATL|RB2|17|1.02|11|-3.2%|25%|264|307|310|363|85
+4|Puka Nacua|LAR|WR1|17|1.05|11|-3.1%|51%|221|265|291|326|85
+5|Ja'Marr Chase|CIN|WR2|17|1.04|6|4%|37%|238|269|277|326|82
+6|Lamar Jackson|BAL|QB2|17|1.09|13|1.1%|42%|299|325|340|439|78
+7|Christian McCaffrey|SF|RB3|17|1.06|8|0.7%|78%|243|278|293|363|77
+8|Jaxon Smith-Njigba|SEA|WR3|17|1.07|11|-0.1%|39%|238|250|262|312|76
+9|Amon-Ra St. Brown|DET|WR4|17|1.10|6|-1%|37%|235|245|259|292|71
+10|Drake Maye|NE|QB3|17|1.12|11|-2.8%|35%|292|315|335|423|69
+11|Joe Burrow|CIN|QB5|17|2.02|6|3.2%|34%|290|309|337|421|68
+12|Jayden Daniels|WAS|QB4|17|2.07|7|-0.4%|41%|286|312|332|432|68
+13|Jalen Hurts|PHI|QB6|17|3.04|10|8.8%|33%|289|312|332|428|68
+14|Jonathan Taylor|IND|RB4|17|1.08|13|1.7%|37%|235|276|277|337|68
+15|James Cook|BUF|RB5|17|1.11|7|-4.2%|36%|236|245|274|337|67
+16|CeeDee Lamb|DAL|WR5|17|2.01|14|-0.7%|44%|216|222|248|298|67
+17|Justin Jefferson|MIN|WR6|17|2.03|6|4.9%|36%|204|215|241|313|65
+18|Trevor Lawrence|JAC|QB7|17|4.04|7|4.5%|34%|279|305|328|414|58
+19|Justin Herbert|LAC|QB8|17|3.08|7|-2.8%|36%|280|297|326|418|58
+20|Caleb Williams|CHI|QB9|17|3.02|10|-3.5%|20%|278|302|324|421|58
+21|Saquon Barkley|PHI|RB6|17|2.05|10|4.4%|35%|218|237|250|340|58
+22|Brock Purdy|SF|QB11|17|5.07|8|-4%|36%|277|301|326|414|56
+23|Kyler Murray|MIN|QB10|17|7.11|6|4%|33%|273|283|325|419|56
+24|Derrick Henry|BAL|RB7|17|3.05|13|-0.1%|33%|215|250|253|322|56
+25|Dak Prescott|DAL|QB12|17|3.12|14|0.5%|34%|282|301|324|412|55
+26|Kenneth Walker III|KC|RB8|17|2.10|5|0.6%|34%|208|224|251|326|55
+27|Nico Collins|HOU|WR7|17|3.06|8|4.4%|49%|195|209|224|278|54
+28|Drake London|ATL|WR8|17|3.03|11|0.4%|73%|204|215|224|271|54
+29|A.J. Brown|NE|WR9|17|2.12|11|-2.5%|61%|188|215|223|284|54
+30|Jaxson Dart|NYG|QB13|17|4.06|8|4.8%|36%|277|297|318|417|52
+31|Omarion Hampton|LAC|RB9|17|2.11|7|0.6%|73%|205|218|238|332|52
+32|George Pickens|DAL|WR10|17|3.07|14|-0.7%|36%|191|207|219|281|52
+33|De'Von Achane|MIA|RB11|17|2.04|6|0.8%|68%|209|247|243|313|51
+34|Ashton Jeanty|LVR|RB10|16|2.06|13|-3.1%|39%|186|220|241|328|51
+35|Brock Bowers|LVR|TE1|17|2.09|13|-1%|81%|191|198|209|251|49
+36|Chase Brown|CIN|RB12|17|3.01|6|-4%|45%|202|234|237|315|48
+37|Rashee Rice|KC|WR11|17|4.01|5|-2.6%|74%|169|199|216|268|47
+38|Bo Nix|DEN|QB14|17|4.11|10|-3.7%|28%|279|291|310|410|45
+39|Trey McBride|ARI|TE2|17|2.08|14|-3.6%|46%|187|191|201|241|45
+40|Chris Olave|NO|WR12|17|3.10|8|0.9%|75%|177|199|211|253|44
+41|Malik Nabers|NYG|WR13|16|3.11|8|3.7%|39%|157|190|199|280|44
+42|Patrick Mahomes|KC|QB15|17|4.08|5|-3.2%|37%|276|296|307|414|43
+43|Zay Flowers|BAL|WR15|17|5.01|13|-0.3%|36%|185|198|208|243|42
+44|Tee Higgins|CIN|WR14|17|4.10|6|4%|66%|182|190|204|253|42
+45|Colston Loveland|CHI|TE3|17|4.03|10|-3.6%|60%|162|180|197|236|42
+46|DeVonta Smith|PHI|WR16|17|4.12|10|6.6%|50%|183|190|199|251|41
+47|Javonte Williams|DAL|RB13|17|4.07|14|2.9%|43%|193|210|225|285|39
+48|Jared Goff|DET|QB16|17|5.12|6|-0.9%|23%|279|280|303|403|38
+49|Breece Hall|NYJ|RB15|17|4.05|13|-2.5%|43%|190|214|223|284|38
+50|Jeremiyah Love|ARI|RB14|17|3.09|14|0.1%|34%|187|205|215|305|38
+51|Garrett Wilson|NYJ|WR17|17|5.06|13|-1%|38%|177|183|196|242|38
+52|Christian Watson|GB|WR18|17|7.08|11|1.3%|25%|161|168|196|251|37
+53|Jaylen Waddle|DEN|WR19|17|5.10|10|-2.5%|37%|164|179|193|247|36
+54|Matthew Stafford|LAR|QB17|17|5.11|11|-0%|39%|278|284|299|403|35
+55|Tyler Warren|IND|TE4|17|5.03|13|1.5%|36%|149|163|181|216|35
+56|Davante Adams|LAR|WR20|17|6.02|11|-3.1%|49%|158|177|193|243|35
+57|Jordan Love|GB|QB18|17|6.10|11|-0.3%|82%|277|278|298|402|34
+58|Tyler Shough|NO|QB19|17|8.02|8|0.5%|17%|273|273|297|406|34
+59|Kyren Williams|LAR|RB16|17|4.02|11|6.4%|52%|188|207|211|287|34
+60|Baker Mayfield|TB|QB20|17|6.12|10|-0.8%|37%|278|278|292|406|33
+61|Travis Etienne|NO|RB17|17|5.09|8|1.8%|45%|191|201|208|287|33
+62|Tetairoa McMillan|CAR|WR21|17|4.09|5|-1.3%|37%|165|181|185|241|33
+63|Luther Burden III|CHI|WR22|17|6.03|10|-2.5%|54%|156|169|183|248|32
+64|Emeka Egbuka|TB|WR23|17|5.08|10|2.6%|42%|155|178|183|245|32
+65|Ladd McConkey|LAC|WR24|17|5.02|7|-2.6%|42%|160|178|181|243|32
+66|D'Andre Swift|CHI|RB18|17|6.01|10|-3.6%|42%|176|193|208|276|31
+67|Mike Evans|SF|WR25|17|7.03|8|-3.2%|65%|146|165|182|247|31
+68|Terry McLaurin|WAS|WR27|17|6.07|7|-2.4%|37%|158|169|180|239|31
+69|Jameson Williams|DET|WR26|17|6.11|6|-1%|36%|158|175|179|243|31
+70|Malik Willis|MIA|QB21|17|9.06|6|-2%|15%|264|264|275|410|30
+71|Rome Odunze|CHI|WR28|17|7.06|10|-2.5%|36%|152|165|173|249|30
+72|Daniel Jones|IND|QB22|17|10.01|13|1.6%|36%|260|262|276|404|29
+73|Tucker Kraft|GB|TE5|17|7.02|11|-3.3%|39%|137|150|162|212|28
+74|Parker Washington|JAC|WR30|17|7.12|7|4%|0%|145|156|175|227|28
+75|D.J. Moore|BUF|WR29|17|6.08|7|0.7%|54%|145|162|173|234|28
+76|Cameron Skattebo|NYG|RB19|17|5.05|8|2.2%|72%|159|198|194|273|27
+77|David Montgomery|HOU|RB20|17|6.04|8|2%|85%|164|181|191|272|27
+78|Sam LaPorta|DET|TE6|17|6.06|6|-2%|60%|141|155|160|208|27
+79|Cameron Ward|TEN|QB23|17|9.11|9|6.3%|39%|252|236|263|402|26
+80|Bucky Irving|TB|RB21|17|5.04|10|-2.2%|63%|166|185|191|269|26
+81|Quinshon Judkins|CLE|RB22|17|6.05|11|0.6%|48%|168|182|187|271|26
+82|D.K. Metcalf|PIT|WR31|17|8.05|9|-2.6%|36%|145|157|172|219|26
+83|C.J. Stroud|HOU|QB24|17|8.12|8|4.4%|29%|264|262|270|388|25
+84|Rhamondre Stevenson|NE|RB23|17|8.07|11|-1.9%|64%|157|163|187|262|25
+85|Jayden Reed|GB|WR34|17|10.06|11|1.3%|36%|139|149|167|221|25
+86|Carnell Tate|TEN|WR33|17|7.09|9|5%|40%|139|140|165|231|25
+87|Marvin Harrison Jr.|ARI|WR32|17|8.06|14|-0.8%|55%|144|149|164|230|25
+88|Harold Fannin Jr.|CLE|TE7|17|7.04|11|3.4%|57%|139|148|158|201|25
+89|Courtland Sutton|DEN|WR35|17|8.10|10|-2.5%|43%|141|152|164|219|24
+90|Quentin Johnston|LAC|WR37|17|11.04|7|-2.6%|56%|132|143|161|228|24
+91|Brian Thomas Jr.|JAC|WR36|17|8.03|7|4%|35%|137|148|158|232|24
+92|Sam Darnold|SEA|QB27|17|8.01|11|0.4%|29%|258|265|261|391|23
+93|Bryce Young|CAR|QB25|17|11.02|5|-0.8%|32%|245|252|247|396|23
+94|Jacoby Brissett|ARI|QB26|13|13.05|14|-1.2%|10%|194|258|247|357|23
+95|Jordan Addison|MIN|WR38|17|10.07|6|4.9%|37%|133|140|162|220|23
+96|Aaron Rodgers|PIT|QB28|17|13.02|9|-2.1%|53%|253|219|258|385|22
+97|Bhayshul Tuten|JAC|RB24|17|7.01|7|0.9%|43%|146|165|170|282|22
+98|George Kittle|SF|TE8|17|8.11|8|-3.6%|44%|114|149|150|210|22
+99|Geno Smith|NYJ|QB29|16|15.02|13|-4.4%|36%|214|235|241|387|21
+100|Fernando Mendoza|LVR|QB30|13|11.01|13|-6.2%|23%|178|235|240|356|21
+101|Jadarian Price|SEA|RB25|17|7.07|11|5.6%|29%|136|162|170|276|21
+102|Michael Pittman Jr.|PIT|WR39|17|10.11|9|-2.6%|60%|138|140|160|205|21
+103|Kyle Pitts|ATL|TE9|17|7.05|11|4.8%|53%|136|141|148|197|21
+104|TreVeyon Henderson|NE|RB26|17|6.09|11|-1.9%|64%|139|163|166|273|20
+105|Jakobi Meyers|JAC|WR40|17|11.10|7|4%|37%|129|136|156|210|20
+106|Xavier Worthy|KC|WR41|17|12.02|5|-2.6%|35%|124|128|152|221|20
+107|Chris Godwin|TB|WR42|17|9.05|10|2.6%|40%|123|140|152|220|20
+108|Josh Downs|IND|WR45|17|11.05|13|-0.8%|61%|126|133|152|213|20
+109|Stefon Diggs|WAS|WR43|17|10.12|7|-2.4%|31%|125|133|150|223|20
+110|Romeo Doubs|NE|WR46|17|12.03|11|-2.5%|37%|128|134|148|218|20
+111|Alec Pierce|IND|WR44|17|10.04|13|-0.8%|67%|126|150|146|227|20
+112|Jaylen Warren|PIT|RB28|17|7.10|9|-2.1%|66%|139|165|174|239|19
+113|Rico Dowdle|PIT|RB27|17|9.03|9|-2.1%|27%|143|157|166|254|19
+114|KC Concepcion|CLE|WR47|17|11.07|11|4.3%|29%|121|121|148|218|19
+115|Jonathon Brooks|CAR|RB29|17|9.10|5|-6%|35%|130|139|159|274|18
+116|Michael Wilson|ARI|WR50|17|9.02|14|-0.8%|42%|122|139|145|213|18
+117|Matthew Golden|GB|WR48|17|11.12|11|1.3%|37%|125|134|138|230|18
+118|Makai Lemon|PHI|WR49|17|9.07|10|6.6%|33%|119|121|138|229|18
+119|Tony Pollard|TEN|RB31|17|9.01|9|2.9%|35%|139|153|162|249|17
+120|J.K. Dobbins|DEN|RB30|17|9.08|10|0.1%|39%|137|150|161|254|17
+121|MarShawn Lloyd|GB|RB32|17|12.10|11|-2.2%|72%|130|133|154|265|17
+122|Jordan Mason|MIN|RB33|17|10.10|6|-0.1%|39%|125|136|155|256|16
+123|Deebo Samuel|SF|WR51|17|12.04|8|-3.2%|51%|112|130|137|220|16
+124|Jacory Croskey-Merritt|WAS|RB34|17|11.06|7|4.2%|30%|124|132|153|256|15
+125|Travis Kelce|KC|TE10|17|8.09|5|1.9%|42%|125|137|145|174|15
+126|Jordyn Tyson|NO|WR53|13|10.03|8|0.9%|45%|90|116|141|186|15
+127|Wan'Dale Robinson|TEN|WR52|17|11.08|9|5%|36%|121|131|139|203|15
+128|Brandon Aubrey|DAL|K1|17|14.04|14|-3.5%|8%|157|175|176|190|14
+129|Rashid Shaheed|SEA|WR54|17|13.11|11|-0.1%|38%|114|115|133|211|14
+130|De'Zhaun Stribling|SF|WR55|17|11.09|8|-3.2%|0%|111|119|125|226|14
+131|Blake Corum|LAR|RB35|17|10.02|11|6.4%|33%|129|131|141|260|13
+132|Khalil Shakir|BUF|WR56|17|13.09|7|0.7%|35%|120|127|136|188|13
+133|Jalen McMillan|TB|WR57|17|18.12|10|2.6%|39%|106|103|125|218|13
+134|Michael Penix Jr.|ATL|QB31|11|18.01|11|1.7%|39%|124|169|219|280|12
+135|Jalen Coker|CAR|WR58|17|13.08|5|-1.3%|18%|112|125|123|211|12
+136|Denzel Boston|CLE|WR59|17|15.08|11|4.3%|42%|107|107|121|215|12
+137|Deshaun Watson|CLE|QB32|7|17.10|11|5.4%|29%|86|124|211|246|11
+138|Chuba Hubbard|CAR|RB36|17|9.04|5|-6%|36%|116|145|139|251|11
+139|Kyle Monangai|CHI|RB37|17|10.05|10|-3.6%|0%|123|133|138|245|11
+140|Tre Tucker|LVR|WR60|17|17.11|13|-5%|0%|106|106|124|200|11
+141|Cameron Dicker|LAC|K2|17|14.05|7|-3.1%|9%|151|160|169|181|10
+142|Mark Andrews|BAL|TE12|17|10.08|13|3.6%|36%|116|131|131|174|10
+143|Dalton Kincaid|BUF|TE11|17|8.08|7|-1.4%|62%|115|129|130|180|10
+144|Keenan Allen|IND|WR62|17|17.04|13|-0.8%|49%|100|94|118|205|10
+145|Adonai Mitchell|NYJ|WR61|17|20.07|13|-1%|28%|100|88|117|211|10
+146|RJ Harvey|DEN|RB38|17|8.04|10|0.1%|36%|112|127|138|235|9
+147|Houston Texans|HOU|DEF1|17|12.08|8|-4%|0%|110|110|125|140|9
+148|Shedeur Sanders|CLE|QB33|8|18.08|11|5.4%|34%|86|91|204|232|8
+149|Dallas Goedert|PHI|TE13|17|10.09|10|7.1%|83%|115|129|131|166|8
+150|Calvin Ridley|TEN|WR63|17|22.04|9|5%|48%|92|95|115|201|8
+151|Tyjae Spears|TEN|RB40|17|15.11|9|2.9%|37%|111|114|136|220|7
+152|Kenneth Gainwell|TB|RB39|17|11.03|10|-2.2%|31%|116|129|131|228|7
+153|Isaiah Likely|NYG|TE14|17|9.12|8|3.2%|73%|115|127|127|169|7
+154|Jalen Nailor|LVR|WR65|17|15.10|13|-5%|0%|95|102|111|198|7
+155|Jerry Jeudy|CLE|WR66|17|19.01|11|4.3%|32%|94|98|110|199|7
+156|Omar Cooper Jr.|NYJ|WR64|17|16.06|13|-1%|38%|92|74|107|215|7
+157|Tua Tagovailoa|ATL|QB34|6|17.08|11|1.7%|27%|78|126|201|185|6
+158|Ka'imi Fairbairn|HOU|K3|17|14.06|8|0.6%|0%|147|166|158|177|6
+159|Jake Ferguson|DAL|TE15|17|9.09|14|-2.5%|55%|116|127|129|156|6
+160|Brenton Strange|JAC|TE16|17|13.03|7|2.5%|48%|110|121|128|162|6
+161|Woody Marks|HOU|RB41|17|13.10|8|2%|0%|111|106|123|235|6
+162|Denver Broncos|DEN|DEF2|17|12.11|10|6.2%|0%|104|105|121|135|6
+163|Seattle Seahawks|SEA|DEF3|17|12.09|11|-4.2%|0%|103|109|121|133|6
+164|Jauan Jennings|MIN|WR67|17|18.10|6|4.9%|33%|93|96|106|205|6
+165|Kayshon Boutte|HOU|WR68|17|17.09|8|4.4%|0%|92|108|104|208|6
+166|Pat Bryant|DEN|WR69|17|20.10|10|-2.5%|65%|89|70|101|211|6
+167|Carson Beck|ARI|QB35|4|20.05|14|-1.2%|29%|49|28|194|166|5
+168|Cam Little|JAC|K4|17|14.07|7|-0.7%|0%|145|148|151|180|5
+169|Josh Jacobs|GB|RB43|9|—|11|-2.2%|67%|33|102|134|184|5
+170|Juwan Johnson|NO|TE17|17|13.07|8|-0.1%|45%|110|119|127|160|5
+171|Rachaad White|WAS|RB42|17|12.05|7|4.2%|39%|106|126|125|223|5
+172|Pittsburgh Steelers|PIT|DEF4|17|14.10|9|12.2%|0%|106|102|114|136|5
+173|Jaylin Noel|HOU|WR70|17|23.07|8|4.4%|19%|88|71|103|206|5
+174|Rashod Bateman|BAL|WR71|17|23.08|13|-0.3%|33%|78|93|100|210|5
+175|Dontayvion Wicks|PHI|WR72|17|18.06|10|6.6%|35%|84|69|96|215|5
+176|Kirk Cousins|LVR|QB36|4|17.05|13|-6.2%|19%|53|51|193|163|4
+177|Cairo Santos|CHI|K5|17|99.08|10|-1.1%|0%|144|147|153|176|4
+178|Eddy Pineiro|SF|K6|17|17.02|8|2%|0%|144|145|152|173|4
+179|Evan McPherson|CIN|K7|17|16.08|6|0.7%|0%|145|149|151|176|4
+180|Aaron Jones|MIN|RB45|17|12.01|6|-0.1%|65%|100|133|124|215|4
+181|Hunter Henry|NE|TE18|17|11.11|11|-3.5%|47%|109|121|123|162|4
+182|Zach Charbonnet|SEA|RB44|10|14.01|11|5.6%|37%|64|124|121|193|4
+183|Baltimore Ravens|BAL|DEF5|17|14.09|13|13.1%|0%|106|98|114|134|4
+184|Devaughn Vele|NO|WR73|17|20.09|8|0.9%|0%|87|77|104|192|4
+185|Tre Harris|LAC|WR74|17|21.02|7|-2.6%|42%|83|78|94|213|4
+186|Jason Myers|SEA|K8|17|14.08|11|1%|0%|147|164|150|175|3
+187|Harrison Mevis|LAR|K10|17|14.12|11|0.7%|0%|145|157|150|175|3
+188|Jake Bates|DET|K9|17|15.01|6|4.2%|8%|146|154|149|175|3
+189|Minnesota Vikings|MIN|DEF6|17|15.03|6|-12.4%|0%|101|104|111|133|3
+190|Philadelphia Eagles|PHI|DEF7|17|12.12|10|-14.5%|0%|102|97|108|140|3
+191|Los Angeles Rams|LAR|DEF8|17|12.06|11|-5%|0%|102|106|108|140|3
+192|Chris Rodriguez|JAC|RB46|17|13.06|7|0.9%|27%|96|100|105|247|3
+193|Ja'Kobi Lane|BAL|WR75|17|15.05|13|-0.3%|0%|82|76|93|210|3
+194|Caleb Douglas|MIA|WR76|17|17.03|6|-1.2%|0%|82|73|93|204|3
+195|New England Patriots|NE|DEF9|17|14.11|11|0.2%|0%|98|95|113|128|2
+196|Ryan Flournoy|DAL|WR77|17|20.08|14|-0.7%|33%|81|84|93|202|2
+197|Trey Smack|GB|K12|17|22.05|11|0.6%|0%|140|145|149|174|1
+198|Will Reichard|MIN|K11|17|16.11|6|1%|0%|145|142|148|174|1
+199|Jacksonville Jaguars|JAC|DEF10|17|15.04|7|-2.7%|0%|100|94|108|133|1
+200|Los Angeles Chargers|LAC|DEF11|17|16.07|7|0.4%|0%|100|94|107|136|1
+201|Germie Bernard|PIT|WR78|17|21.03|9|-2.6%|37%|71|74|93|199|1
+202|Malachi Fields|NYG|WR79|17|18.03|8|3.7%|19%|76|67|90|196|1
+203|Wil Lutz|DEN|K13|17|22.08|10|-3.5%|0%|144|146|147|171|0
+204|Harrison Butker|KC|K14|17|16.10|5|0.1%|0%|144|143|147|169|0
+205|Kansas City Chiefs|KC|DEF12|17|22.10|5|2.1%|0%|98|85|107|134|0
+206|Detroit Lions|DET|DEF13|17|17.01|6|10.7%|0%|99|102|106|134|0
+207|Terrance Ferguson|LAR|TE19|17|17.12|11|-2.2%|0%|94|100|105|170|0
+208|Keaton Mitchell|LAC|RB47|17|16.01|7|0.6%|33%|88|78|103|225|0
+209|Zachariah Branch|ATL|WR81|17|19.04|11|0.4%|20%|77|66|89|192|0
+210|Chris Bell|MIA|WR80|17|19.12|6|-1.2%|36%|70|70|84|210|0
+211|Travis Hunter|JAC|WR82|17|16.05|7|4%|44%|69|67|75|223|0
+212|Tyler Loop|BAL|K15|17|19.06|13|-1.6%|0%|134|150|146|175|-1
+213|Dalton Schultz|HOU|TE21|17|15.06|8|0.5%|57%|108|110|120|148|-1
+214|Chigoziem Okonkwo|WAS|TE22|17|15.09|7|-3%|22%|105|104|112|156|-1
+215|Kenyon Sadiq|NYJ|TE20|17|15.07|13|-1.5%|24%|100|102|111|162|-1
+216|Buffalo Bills|BUF|DEF14|17|22.06|7|0.4%|0%|98|97|106|131|-1
+217|New York Giants|NYG|DEF15|17|27.04|8|-7.9%|0%|98|85|106|131|-1
+218|Cooper Kupp|SEA|WR83|17|20.01|11|-0.1%|36%|84|88|97|193|-1
+219|Malik Washington|MIA|WR84|17|17.06|6|-1.2%|0%|80|90|86|186|-1
+220|Tyquan Thornton|KC|WR85|17|27.03|5|-2.6%|14%|71|73|80|202|-1
+221|Andres Borregales|NE|K16|17|20.02|11|0.2%|0%|141|137|146|168|-2
+222|Dylan Sampson|CLE|RB49|17|18.05|11|0.6%|34%|92|82|106|196|-2
+223|Mike Washington Jr.|LVR|RB48|17|13.01|13|-3.1%|21%|78|76|93|233|-2
+224|Chris Boswell|PIT|K17|17|16.09|9|-2.9%|0%|141|139|144|168|-3
+225|T.J. Hockenson|MIN|TE23|17|13.12|6|2%|51%|104|106|116|148|-3
+226|Green Bay Packers|GB|DEF16|17|19.08|11|-2.2%|0%|95|86|103|131|-3
+227|Tyler Allgeier|ARI|RB50|17|12.07|14|0.1%|23%|82|86|100|206|-3
+228|Keon Coleman|BUF|WR86|17|23.11|7|0.7%|24%|65|53|79|189|-3
+229|Chase McLaughlin|TB|K18|17|22.07|10|5%|0%|140|143|144|167|-4
+230|Chicago Bears|CHI|DEF17|17|25.05|10|-4.8%|0%|94|97|103|129|-4
+231|Cleveland Browns|CLE|DEF18|17|105.01|11|8%|0%|95|87|103|129|-4
+232|Tampa Bay Buccaneers|TB|DEF19|17|105.11|10|5.5%|0%|96|87|102|129|-4
+233|Brian Robinson Jr.|ATL|RB51|17|14.03|11|-3.2%|36%|80|78|96|202|-4
+234|Isaac TeSlaa|DET|WR87|17|20.12|6|-1%|0%|67|67|79|185|-4
+235|Kyle Williams|NE|WR88|17|29.02|11|-2.5%|6%|58|29|73|202|-4
+236|Jake Elliott|PHI|K19|17|106.09|10|-0.9%|0%|139|136|144|164|-5
+237|AJ Barner|SEA|TE24|17|16.04|11|-0.1%|28%|98|94|103|153|-5
+238|Nathaniel Dell|HOU|WR91|13|18.07|8|4.4%|17%|45|64|77|156|-5
+239|Demario Douglas|NE|WR89|17|27.10|11|-2.5%|15%|65|68|73|189|-5
+240|Jack Bech|LVR|WR90|17|25.04|13|-5%|29%|64|49|71|194|-5
+241|Cyrus Allen|KC|WR92|17|17.07|5|-2.6%|0%|58|60|67|201|-5
+242|Tyler Bass|BUF|K20|17|102.09|7|-1.6%|0%|138|141|142|164|-6
+243|Cade Otton|TB|TE25|17|20.04|10|-2.8%|64%|102|97|106|141|-6
+244|San Francisco 49ers|SF|DEF20|17|23.05|8|1.7%|0%|95|82|102|125|-6
+245|Dominic Zvada|NYG|K21|17|103.04|8|0.2%|0%|134|111|141|166|-7
+246|Indianapolis Colts|IND|DEF21|17|85.05|13|10.2%|0%|94|85|99|128|-7
+247|Tennessee Titans|TEN|DEF22|17|104.02|9|-0.2%|0%|94|81|97|129|-7
+248|Joshua Palmer|BUF|WR94|17|257.12|7|0.7%|42%|63|39|71|172|-7
+249|Darius Slayton|NYG|WR95|17|28.02|8|3.7%|39%|60|59|69|177|-7
+250|Xavier Legette|CAR|WR93|17|31.07|5|-1.3%|35%|65|63|68|181|-7
+`;
+
+var TIER_STARTS = [1, 9, 24, 40, 56, 74, 99, 122, 140, 157, 195, 228];
+var VAL_MIN = -7, VAL_MAX = 100;
+var STORE = 'superflex250.v1';
+
+var players = RAW.trim().split('\n').map(function (line) {
+  var f = line.split('|');
+  var tier = 1;
+  for (var i = 0; i < TIER_STARTS.length; i++) if (+f[0] >= TIER_STARTS[i]) tier = i + 1;
+  return {
+    rk: +f[0], name: f[1], team: f[2], pos: f[3],
+    posGroup: f[3].replace(/[0-9]+$/, ''),
+    games: f[4], adp: f[5], bye: f[6], sos: f[7], risk: f[8],
+    floor: f[9], cons: f[10], proj: f[11], ceil: f[12], val: +f[13],
+    tier: tier
+  };
+});
+
+var POSITIONS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF'];
+var taken = new Set();
+var takeOrder = [];
+var filter = 'ALL';
+var query = '';
+var showTaken = false;
+
+function load() {
+  try {
+    var s = JSON.parse(localStorage.getItem(STORE) || '{}');
+    if (Array.isArray(s.taken)) taken = new Set(s.taken);
+    if (typeof s.filter === 'string' && POSITIONS.indexOf(s.filter) > -1) filter = s.filter;
+    if (typeof s.showTaken === 'boolean') showTaken = s.showTaken;
+  } catch (e) { /* private mode, blocked storage — start clean */ }
+}
+function save() {
+  try {
+    localStorage.setItem(STORE, JSON.stringify({
+      taken: Array.from(taken), filter: filter, showTaken: showTaken
+    }));
+  } catch (e) { /* nothing to do — board still works for this sitting */ }
+}
+
+function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+
+/* ---------- build ---------- */
+var board = document.getElementById('board');
+var rowEls = {}, tierEls = {};
+
+(function build() {
+  var html = '', lastTier = 0;
+  players.forEach(function (p) {
+    if (p.tier !== lastTier) {
+      lastTier = p.tier;
+      html += '<div class="tier" data-tier="' + p.tier + '">' +
+        '<span class="tier-name">Tier ' + p.tier + '</span>' +
+        '<span class="tier-rule"></span>' +
+        '<span class="tier-left"></span></div><div class="list" data-list="' + p.tier + '">';
+    }
+    var pct = Math.max(2, Math.round((p.val - VAL_MIN) / (VAL_MAX - VAL_MIN) * 100));
+    var tip = p.name + ' — floor ' + p.floor + ' / proj ' + p.proj + ' / ceiling ' + p.ceil +
+      ' · injury risk ' + p.risk + ' · SOS ' + p.sos + ' · ' + p.games + ' games';
+    html += '<button type="button" class="row" data-rk="' + p.rk + '" title="' + esc(tip) + '">' +
+      '<span class="rk">' + p.rk + '</span>' +
+      '<span class="who"><span class="name">' + esc(p.name) + '</span>' +
+      '<span class="team">' + p.team + '</span>' +
+      '<span class="pos ' + p.posGroup + '">' + p.pos + '</span></span>' +
+      '<span class="num">' + p.bye + '</span>' +
+      '<span class="num">' + p.adp + '</span>' +
+      '<span class="num">' + p.proj + '</span>' +
+      '<span class="val"><span class="n">' + p.val + '</span>' +
+      '<span class="meter"><i style="width:' + pct + '%"></i></span></span>' +
+      '</button>';
+    if (p.rk === 250 || players[p.rk] && players[p.rk].tier !== p.tier) html += '</div>';
+  });
+  board.innerHTML = html;
+  board.querySelectorAll('.row').forEach(function (el) { rowEls[el.dataset.rk] = el; });
+  board.querySelectorAll('.tier').forEach(function (el) { tierEls[el.dataset.tier] = el; });
+})();
+
+/* ---------- filters ---------- */
+var filtersEl = document.getElementById('filters');
+filtersEl.innerHTML = POSITIONS.map(function (p) {
+  return '<button type="button" class="chip" data-pos="' + p + '" aria-pressed="false">' +
+    (p === 'ALL' ? 'All' : p) + '</button>';
+}).join('');
+
+/* ---------- render ---------- */
+var availEl = document.getElementById('avail');
+var goneEl = document.getElementById('gone');
+var noneEl = document.getElementById('none');
+var undoBtn = document.getElementById('undo');
+var showBtn = document.getElementById('showTaken');
+
+function matches(p) {
+  if (filter !== 'ALL' && p.posGroup !== filter) return false;
+  if (!query) return true;
+  return (p.name + ' ' + p.team + ' ' + p.pos).toLowerCase().indexOf(query) > -1;
+}
+
+function render() {
+  var visible = 0, tierLeft = {}, tierTotal = {};
+  players.forEach(function (p) {
+    var isTaken = taken.has(p.rk);
+    tierTotal[p.tier] = (tierTotal[p.tier] || 0) + 1;
+    if (!isTaken) tierLeft[p.tier] = (tierLeft[p.tier] || 0) + 1;
+    var el = rowEls[p.rk];
+    var show = matches(p) && (!isTaken || showTaken);
+    el.hidden = !show;
+    el.classList.toggle('taken', isTaken);
+    el.setAttribute('aria-label', (isTaken ? 'Restore ' : 'Remove ') + p.name);
+    if (show) visible++;
+  });
+
+  Object.keys(tierEls).forEach(function (t) {
+    var left = tierLeft[t] || 0;
+    var el = tierEls[t];
+    el.querySelector('.tier-left').textContent = left === 0
+      ? 'cleared' : left + ' of ' + tierTotal[t] + ' left';
+    el.classList.toggle('empty', left === 0);
+    var list = el.nextElementSibling;
+    var anyVisible = list.querySelector('.row:not([hidden])');
+    el.hidden = !anyVisible;
+    list.hidden = !anyVisible;
+  });
+
+  availEl.textContent = 250 - taken.size;
+  goneEl.textContent = taken.size;
+  undoBtn.disabled = takeOrder.length === 0;
+  noneEl.hidden = visible > 0;
+  save();
+}
+
+/* ---------- interaction ---------- */
+var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+board.addEventListener('click', function (e) {
+  var el = e.target.closest('.row');
+  if (!el) return;
+  var rk = +el.dataset.rk;
+  if (taken.has(rk)) {
+    taken.delete(rk);
+    takeOrder = takeOrder.filter(function (r) { return r !== rk; });
+    render();
+  } else {
+    taken.add(rk);
+    takeOrder.push(rk);
+    if (showTaken || reduce) { render(); return; }
+    el.classList.add('leaving');
+    setTimeout(function () { el.classList.remove('leaving'); render(); }, 160);
+  }
+});
+
+filtersEl.addEventListener('click', function (e) {
+  var el = e.target.closest('.chip');
+  if (!el) return;
+  filter = el.dataset.pos;
+  syncChips();
+  render();
+});
+function syncChips() {
+  filtersEl.querySelectorAll('.chip').forEach(function (c) {
+    c.setAttribute('aria-pressed', String(c.dataset.pos === filter));
+  });
+}
+
+document.getElementById('q').addEventListener('input', function (e) {
+  query = e.target.value.trim().toLowerCase();
+  render();
+});
+
+undoBtn.addEventListener('click', function () {
+  var rk = takeOrder.pop();
+  if (rk == null) return;
+  taken.delete(rk);
+  render();
+});
+
+showBtn.addEventListener('click', function () {
+  showTaken = !showTaken;
+  showBtn.setAttribute('aria-pressed', String(showTaken));
+  showBtn.textContent = showTaken ? 'Hide taken' : 'Show taken';
+  render();
+});
+
+var resetBtn = document.getElementById('reset');
+var resetArmed = false, resetTimer;
+resetBtn.addEventListener('click', function () {
+  if (!resetArmed) {
+    resetArmed = true;
+    resetBtn.textContent = 'Put all 250 back?';
+    resetTimer = setTimeout(function () {
+      resetArmed = false; resetBtn.textContent = 'Reset';
+    }, 3500);
+    return;
+  }
+  clearTimeout(resetTimer);
+  resetArmed = false; resetBtn.textContent = 'Reset';
+  taken.clear(); takeOrder = [];
+  render();
+});
+
+load();
+syncChips();
+showBtn.setAttribute('aria-pressed', String(showTaken));
+showBtn.textContent = showTaken ? 'Hide taken' : 'Show taken';
+render();
+</script>
