@@ -44,7 +44,6 @@ import { StrategyAdvisor } from "./StrategyAdvisor";
 import { InsightsTab } from "./InsightsTab";
 import { OffensesTab } from "./OffensesTab";
 import { RawCostsTab } from "./RawCostsTab";
-import { RhettDraftTab } from "./RhettDraftTab";
 import { NotesTab } from "./NotesTab";
 import { DraftPlanTab } from "./DraftPlanTab";
 import { LiveDraftTab } from "./LiveDraftTab";
@@ -125,7 +124,7 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
   const { data, update, loaded, saveState } = useDraftState(profileId);
 
   const [tab, setTab] = useState<
-    "board" | "targets" | "plan" | "live" | "rhett" | "rankings" | "drafters" | "offenses" | "rawcosts" | "notes"
+    "board" | "targets" | "plan" | "live" | "rankings" | "drafters" | "offenses" | "rawcosts" | "notes"
   >("board");
   const [posFilter, setPosFilter] = useState("ALL");
   const [search, setSearch] = useState("");
@@ -802,9 +801,6 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
         <button style={tab === "live" ? styles.tabActive : styles.tab} onClick={() => setTab("live")}>
           Live Draft
         </button>
-        <button style={tab === "rhett" ? styles.tabActive : styles.tab} onClick={() => setTab("rhett")}>
-          Rhett Draft
-        </button>
         <button style={tab === "rankings" ? styles.tabActive : styles.tab} onClick={() => setTab("rankings")}>
           Rankings
         </button>
@@ -1131,8 +1127,6 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
           onSlotFlex={setSlotFlex}
         />
       )}
-
-      {tab === "rhett" && <RhettDraftTab board={board} onDrafted={setDrafted} />}
 
       {tab === "rawcosts" && <RawCostsTab />}
 
