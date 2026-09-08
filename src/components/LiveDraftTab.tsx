@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Strategy } from "@/lib/data/strategies";
 import {
   Band,
@@ -43,6 +43,10 @@ const MAX_EACH = 6;
 // They share one colour and one pool instead of splitting near-identical players
 // between them on a coin-flip.
 const mergeTolerance = (price: number) => Math.max(2, price * 0.15);
+
+// How long a player sits greyed out after you click his × before he's struck
+// off. Long enough to read as confirmation and to take a mis-tap back.
+const STRIKE_MS = 3000;
 
 const FLEX_META: Record<SlotFlex, { icon: string; label: string; title: string }> = {
   fixed: { icon: "=", label: "fixed", title: "Never moves, whatever the rest of the position does" },
@@ -125,6 +129,42 @@ export function LiveDraftTab({
   // Paid/Mine only appear for the row you right-clicked — the table stays a
   // reading surface until you actually need to record something.
   const [revealed, setRevealed] = useState<string | null>(null);
+  // Players whose × has been clicked: greyed out, and struck off when their
+  // timer fires. Clicking again inside the window calls it off.
+  const [striking, setStriking] = useState<string[]>([]);
+  const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  useEffect(() => {
+    const pending = timers.current;
+    return () => {
+      for (const t of pending.values()) clearTimeout(t);
+      pending.clear();
+    };
+  }, []);
+
+  const toggleStrike = (row: BoardRowType) => {
+    // Already struck off (so only on screen with the Drafted filter up): the ×
+    // puts him straight back, with nothing to confirm.
+    if (row.isDrafted) {
+      onDrafted(row, false);
+      return;
+    }
+    const pending = timers.current.get(row.id);
+    if (pending) {
+      clearTimeout(pending);
+      timers.current.delete(row.id);
+      setStriking((prev) => prev.filter((id) => id !== row.id));
+      return;
+    }
+    setStriking((prev) => [...prev, row.id]);
+    timers.current.set(
+      row.id,
+      setTimeout(() => {
+        timers.current.delete(row.id);
+        setStriking((prev) => prev.filter((id) => id !== row.id));
+        onDrafted(row, true);
+      }, STRIKE_MS)
+    );
+  };
 
   const budgets = useMemo(() => {
     const out = {} as Record<Pos, PositionBudget & { picks: PickView[] }>;
@@ -487,9 +527,12 @@ export function LiveDraftTab({
         Rows are shaded by the pick they&apos;re priced for — darker for Loved than Liked. The shading tracks the
         prices live, so it slides as picks are repriced or flexed; picks that end up close in price share one colour
         and one shortlist (☆).{" "}
-        <b style={{ color: "#8B92A0" }}>Press and hold 3s</b> to strike a player off as drafted.{" "}
-        <b style={{ color: "#8B92A0" }}>Right-click</b> for the menu, which also opens that row&apos;s Paid and Mine boxes
-        — type what he went for, hit ME if you won him, and the other picks re-solve around it.
+        Hit the <b style={{ color: "#8B92A0" }}>×</b> in the Drafted column when a player goes — he greys out for
+        three seconds and then drops off the list, so a mis-click can be taken back by clicking it again.{" "}
+        <b style={{ color: "#8B92A0" }}>Press and hold 3s</b> on a name does the same thing.{" "}
+        <b style={{ color: "#8B92A0" }}>Right-click</b>{" "}
+        for the menu, which also opens that row&apos;s Paid and Mine boxes — type what he went for, hit ME if you won
+        him, and the other picks re-solve around it.
       </div>
 
       {rows.length === 0 ? (
@@ -526,6 +569,9 @@ export function LiveDraftTab({
                     </th>
                   </>
                 )}
+                <th style={styles.th} title="Click the × when he's gone — he greys out, then drops off the list">
+                  Drafted
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -552,6 +598,9 @@ export function LiveDraftTab({
                     showPos={false}
                     showTgt={false}
                     showLive={false}
+                    showStrike
+                    striking={striking.includes(row.id)}
+                    onStrike={toggleStrike}
                     showPaid={revealed === row.id}
                     showMine={revealed === row.id}
                     holdMs={3000}

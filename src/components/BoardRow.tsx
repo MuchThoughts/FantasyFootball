@@ -60,6 +60,12 @@ interface BoardRowProps {
   onHoldAction?: (row: BoardRowType) => void;
   holdMs?: number;
   onMine?: (row: BoardRowType, value: boolean) => void;
+  // Live Draft: a "Drafted" column carrying an × on every row. Clicking it
+  // greys the player out for a beat before he's struck off, which both reads as
+  // confirmation and leaves a moment to take a mis-tap back.
+  showStrike?: boolean;
+  striking?: boolean;
+  onStrike?: (row: BoardRowType) => void;
   // When defined, render an "Act" cell (actual historical draft cost for this
   // pos+rank) just left of Tgt. undefined = no Act column at all.
   actCost?: number | null;
@@ -102,6 +108,9 @@ export function BoardRow({
   onHoldAction,
   holdMs,
   onMine,
+  showStrike = false,
+  striking = false,
+  onStrike,
   actCost,
   finish2025,
   pts2025,
@@ -220,7 +229,10 @@ export function BoardRow({
         const r = (nameRef.current ?? (e.currentTarget as HTMLElement)).getBoundingClientRect();
         onOpenMenu(row, { top: r.top, bottom: r.bottom, left: e.clientX });
       }}
-      style={{ opacity: dragging ? 0.35 : dimmed ? 0.4 : 1 }}
+      style={{
+        opacity: dragging ? 0.35 : striking || dimmed ? 0.4 : 1,
+        transition: striking ? "opacity 180ms ease" : undefined,
+      }}
     >
       <td style={{ ...styles.td, ...styles.tdSticky, ...dragCol1, ...tBreakStyle, ...stickyBg, ...targetGlow }}>
         <span style={{ display: "inline-flex", alignItems: "center" }}>
@@ -414,6 +426,35 @@ export function BoardRow({
               }}
             >
               ME
+            </button>
+          )}
+        </td>
+      )}
+      {showStrike && (
+        <td style={{ ...styles.td, ...tBreakStyle, ...bgStyle, padding: "2px 4px" }}>
+          {row.isKeeper ? (
+            <span style={{ fontSize: 10, color: "#8B92A0" }}>—</span>
+          ) : (
+            <button
+              onClick={() => onStrike?.(row)}
+              title={
+                striking
+                  ? `Going… click again to keep ${row.name} on the list`
+                  : `${row.name} is drafted — strike him off`
+              }
+              style={{
+                background: striking ? "#5A2E2B" : "transparent",
+                border: `1px solid ${striking ? "#E1524B" : "#3A3F4A"}`,
+                borderRadius: 4,
+                color: striking ? "#EDEEF0" : "#8B92A0",
+                fontSize: 11,
+                fontWeight: 700,
+                lineHeight: 1,
+                padding: "3px 7px",
+                cursor: "pointer",
+              }}
+            >
+              ×
             </button>
           )}
         </td>
