@@ -1,29 +1,47 @@
 // Draft Sharks rankings — 2026 NFL draft, HALF-PPR SUPERFLEX.
 //
-// Transcribed from https://www.draftsharks.com/rankings/half-ppr-superflex on
-// 2026-09-08, replacing the 2026-08-31 pull. Their published board is a single
-// overall order with every position interleaved, so unlike the FantasyPros
-// source the defenses sit where the room actually takes them (their DEF1 is the
-// 145th name here) rather than being appended after the skill players.
+// Transcribed from draftsharks.com on 2026-09-08. Two sources, stitched:
 //
-// 230 players. The 20 kickers on their board are dropped — this league doesn't
-// roster one — and the remaining order is densified, so a rank here is a
-// position among players you can actually draft. All 230 non-kicker rows matched
-// a player in players.ts; the fuzzy ones were suffix and nickname variants
-// (Cameron/Cam Ward, Cameron/Cam Skattebo, Chigoziem/Chig Okonkwo,
-// Nathaniel/Tank Dell, Jonathon/Jonathan Brooks) plus the 22 defenses, which
-// they name "Houston Texans" to our "Texans D/ST".
+//   1. Their overall half-PPR superflex board, 250 deep. The 20 kickers on it
+//      are dropped — this league doesn't roster one — leaving 230. Positions are
+//      interleaved the way they publish them, so the defenses sit where the room
+//      actually takes them (their DEF1 is the 145th name here) rather than being
+//      appended after the skill players the way the FantasyPros source does.
 //
-// Their board also carries explicit tiers (13 of them), which the app uses in
-// place of its own strategy-derived tiers whenever this source is the active one.
+//   2. Their per-position RB and WR pages, which run far deeper than the overall
+//      board does — RB to 108 and WR to 169, against the board's 51 and 96. The
+//      entries past the board are appended behind it, ordered by the same 3D
+//      value the board itself is sorted by. That value never rises within a
+//      positional list, so this cannot reorder a position against its own page.
 //
-// Regenerate by re-pasting the table and re-running the matcher against
-// players.ts.
+// Positional rank is what sets a player's price (BoardRow.effRank indexes
+// rawCostAt), so extending RB and WR past the board's cut is the whole point:
+// without it every RB past 51 and WR past 96 fell back to built-in ADP order and
+// was priced off the wrong slot.
+//
+// The overlap between the two sources was checked rather than assumed — all 51
+// board RBs and 96 board WRs appear in the same order, with the same position
+// labels, on the positional pages.
+//
+// 345 of the 360 combined rows matched a player in players.ts. The 15 that
+// didn't are deep WRs (and one RB) with no entry in the app's player pool at
+// all, so they were never draftable here. Fuzzy hits were suffix and nickname
+// variants (Cameron/Cam Ward, Cameron/Cam Skattebo, Jonathon/Jonathan Brooks,
+// Nathaniel/Tank Dell, Chigoziem/Chig Okonkwo, Marquise/Hollywood Brown,
+// Mitchell/Mitch Tinsley) plus the 22 defenses, which they name "Houston Texans"
+// to our "Texans D/ST".
+//
+// Only the 230 players on the overall board carry a tier; the deeper positional
+// entries are below where Draft Sharks tiers, and show "—" rather than a
+// borrowed number. Tiers here override the app's strategy-derived ones whenever
+// this source is active.
+//
+// Regenerate by re-pasting the three tables and re-running the builder.
 
 export const DS_SUPERFLEX_SOURCE_ID = "ds-superflex";
 export const DS_SUPERFLEX_SOURCE_NAME = "Draft Sharks Superflex (Half PPR)";
 
-// player uid (lowercased alphanumeric name) -> overall rank, dense 1..230.
+// player uid (lowercased alphanumeric name) -> overall rank, dense 1..345.
 export const DS_SUPERFLEX_RANKS: Record<string, number> = {
   "joshallen": 1,
   "jahmyrgibbs": 2,
@@ -255,9 +273,125 @@ export const DS_SUPERFLEX_RANKS: Record<string, number> = {
   "joshuapalmer": 228,
   "xavierlegette": 229,
   "kendrickbourne": 230,
+  "jonahcoleman": 231,
+  "marvinmimsjr": 232,
+  "jahandotson": 233,
+  "andreiiosivas": 234,
+  "alvinkamara": 235,
+  "tyronetracyjr": 236,
+  "kavontaeturpin": 237,
+  "troyfranklin": 238,
+  "toryhorton": 239,
+  "tedhurstiii": 240,
+  "zavionthomas": 241,
+  "malikbenson": 242,
+  "brycelance": 243,
+  "emmettjohnson": 244,
+  "malikdavis": 245,
+  "braelonallen": 246,
+  "najeeharris": 247,
+  "hollywoodbrown": 248,
+  "elicayomanor": 249,
+  "treylonburks": 250,
+  "isiahpacheco": 251,
+  "justicehill": 252,
+  "romanwilson": 253,
+  "antoniowilliams": 254,
+  "isaiahwilliams": 255,
+  "isaiahbond": 256,
+  "elijahsarratt": 257,
+  "jamesconner": 258,
+  "tankbigsby": 259,
+  "olamidezaccheaus": 260,
+  "christiankirk": 261,
+  "taifelton": 262,
+  "chrisbrooks": 263,
+  "kaytronallen": 264,
+  "nicholassingleton": 265,
+  "seantucker": 266,
+  "brenenthompson": 267,
+  "jalenroyals": 268,
+  "samajeperine": 269,
+  "georgeholani": 270,
+  "kaelonblack": 271,
+  "xavierhutchinson": 272,
+  "odellbeckhamjr": 273,
+  "kendremiller": 274,
+  "kalifraymond": 275,
+  "mackhollins": 276,
+  "isaiahdavis": 277,
+  "kimanividal": 278,
+  "raydavis": 279,
+  "savionwilliams": 280,
+  "lukemccaffrey": 281,
+  "jordanwhittington": 282,
+  "jimmyhornjr": 283,
+  "demarcusrobinson": 284,
+  "chimeredike": 285,
+  "tutuatwell": 286,
+  "jalentolbert": 287,
+  "tezjohnson": 288,
+  "devontezwalker": 289,
+  "tyjohnson": 290,
+  "lequintallenjr": 291,
+  "jaylenwright": 292,
+  "jaylinlane": 293,
+  "dyamibrown": 294,
+  "devinsingletary": 295,
+  "olliegordonii": 296,
+  "skylerbell": 297,
+  "colbieyoung": 298,
+  "emanuelwilson": 299,
+  "sethmcgowan": 300,
+  "kalebjohnson": 301,
+  "jahdaewalker": 302,
+  "brashardsmith": 303,
+  "adamrandall": 304,
+  "demondclaiborne": 305,
+  "jordanjames": 306,
+  "jacobsaylors": 307,
+  "reggievirgil": 308,
+  "johnmetchieiii": 309,
+  "mitchtinsley": 310,
+  "konatamumpfield": 311,
+  "jeremymcnichols": 312,
+  "sionevaki": 313,
+  "ashtondulin": 314,
+  "isaacguerendo": 315,
+  "kevincolemanjr": 316,
+  "jordanwatkins": 317,
+  "kylejuszczyk": 318,
+  "dylanlaube": 319,
+  "jonathanmingo": 320,
+  "dontethorntonjr": 321,
+  "trevoretienne": 322,
+  "audricestime": 323,
+  "cjdaniels": 324,
+  "eliheidenreich": 325,
+  "jaydonblue": 326,
+  "deriusdavis": 327,
+  "emaridemercado": 328,
+  "timpatrick": 329,
+  "deionburks": 330,
+  "raheimsanders": 331,
+  "roschonjohnson": 332,
+  "xaviersmith": 333,
+  "jacobcowing": 334,
+  "willshipley": 335,
+  "djgiddens": 336,
+  "tahjbrooks": 337,
+  "kadenwetjen": 338,
+  "hunterluepke": 339,
+  "tylerbadie": 340,
+  "rasheenali": 341,
+  "bamknight": 342,
+  "curtissamuel": 343,
+  "ajdillon": 344,
+  "pierrestrongjr": 345,
 };
 
-// player uid -> the tier Draft Sharks put him in (1 = best).
+// player uid -> the tier Draft Sharks put him in on their overall board (1 = best).
+// Only the top 230; deeper RB/WR entries are untiered by design.
 export const DS_SUPERFLEX_TIERS: Record<string, number> = {
   "joshallen": 1,
   "jahmyrgibbs": 1,
