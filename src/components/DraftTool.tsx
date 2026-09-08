@@ -43,6 +43,7 @@ import { MarketReadPanel } from "./MarketReadPanel";
 import { StrategyAdvisor } from "./StrategyAdvisor";
 import { InsightsTab } from "./InsightsTab";
 import { OffensesTab } from "./OffensesTab";
+import { DepthChartsTab } from "./DepthChartsTab";
 import { RawCostsTab } from "./RawCostsTab";
 import { NotesTab } from "./NotesTab";
 import { DraftPlanTab } from "./DraftPlanTab";
@@ -124,7 +125,7 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
   const { data, update, loaded, saveState } = useDraftState(profileId);
 
   const [tab, setTab] = useState<
-    "board" | "targets" | "plan" | "live" | "rankings" | "drafters" | "offenses" | "rawcosts" | "notes"
+    "board" | "targets" | "plan" | "live" | "rankings" | "drafters" | "offenses" | "depth" | "rawcosts" | "notes"
   >("board");
   const [posFilter, setPosFilter] = useState("ALL");
   const [search, setSearch] = useState("");
@@ -810,6 +811,9 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
         <button style={tab === "offenses" ? styles.tabActive : styles.tab} onClick={() => setTab("offenses")}>
           Team Stats
         </button>
+        <button style={tab === "depth" ? styles.tabActive : styles.tab} onClick={() => setTab("depth")}>
+          Depth Charts
+        </button>
         <button style={tab === "rawcosts" ? styles.tabActive : styles.tab} onClick={() => setTab("rawcosts")}>
           Raw Draft Costs
         </button>
@@ -1059,6 +1063,8 @@ function DraftTool({ profileId, profiles, onSelectProfile, onCreateProfile }: Dr
       )}
 
       {tab === "offenses" && <OffensesTab rows={offenseRows} sort={offSort} setSort={setOffSort} />}
+
+      {tab === "depth" && <DepthChartsTab board={board} />}
 
       {tab === "targets" && (
         <TargetsTab
